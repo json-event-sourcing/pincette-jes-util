@@ -14,6 +14,7 @@ import net.pincette.util.Util.GeneralException;
  * @since 1.0
  */
 public class Href {
+  private static String contextPath;
   public final String app;
   public final String id;
   public final String type;
@@ -53,7 +54,7 @@ public class Href {
    * @since 1.0
    */
   public Href(final String href) {
-    this(getPath(href)[0], getPath(href)[2], getId(href));
+    this(getPath(href)[0], getPath(href)[1], getId(href));
   }
 
   private static String addPrefix(final String app, final String type) {
@@ -63,17 +64,21 @@ public class Href {
         .orElse(type);
   }
 
+  private static String getHref(final String href) {
+    return contextPath != null ? href.substring(contextPath.length()) : href;
+  }
+
   private static String getId(final String href) {
     return Optional.of(getPath(href))
-        .filter(path -> path.length == 4)
-        .map(path -> path[3])
+        .filter(path -> path.length == 3)
+        .map(path -> path[2])
         .orElse(null);
   }
 
   private static String[] getPath(final String href) {
-    final String[] path = split(href);
+    final String[] path = split(getHref(href));
 
-    if (path.length < 3 || path.length > 4) {
+    if (path.length < 2 || path.length > 3) {
       throw new GeneralException("Invalid href " + href);
     }
 
@@ -87,6 +92,17 @@ public class Href {
         .orElse(type);
   }
 
+  /**
+   * Sets the global context path, which will be prepended to the path. This way an application can
+   * retrieve the context path from a configuration and set it once.
+   *
+   * @param path the context path.
+   * @since 1.0.1
+   */
+  public static void setContextPath(final String path) {
+    contextPath = path;
+  }
+
   private static String[] split(final String href) {
     return getSegments(
             href.startsWith("/")
@@ -97,13 +113,19 @@ public class Href {
   }
 
   /**
-   * Generates the path for the href, which has the form /&lt;app&gt;/api/&lt;type&gt;[/&lt;id&gt;.
-   * The type will appear without prefix.
+   * Generates the path for the href, which has the form /&lt;app&gt;/&lt;type&gt;[/&lt;id&gt;. The
+   * type will appear without prefix. If the global context path is not <code>null</code> it will be
+   * prepended to the path.
    *
    * @return The path.
    * @since 1.0
    */
   public String path() {
-    return "/" + app + "/api/" + removePrefix(type) + (id != null ? ("/" + id) : "");
+    return (contextPath != null ? contextPath : "")
+        + "/"
+        + app
+        + "/"
+        + removePrefix(type)
+        + (id != null ? ("/" + id) : "");
   }
 }

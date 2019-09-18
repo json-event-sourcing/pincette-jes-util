@@ -7,7 +7,7 @@
   <groupId>net.pincette</groupId>
   <artifactId>pincette-jes-util</artifactId>
   <packaging>jar</packaging>
-  <version>1.0</version>
+  <version>1.0.1</version>
   <name>pincette-jes-util</name>
   <description>Utilities to work with pincette-jes</description>
   <url>https://github.com/wdonne/pincette-jes-util</url>
@@ -72,7 +72,7 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-common</artifactId>
-      <version>1.5.7</version>
+      <version>1.5.8</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
