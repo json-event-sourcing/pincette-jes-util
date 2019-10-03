@@ -5,6 +5,7 @@ import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.exists;
 import static com.mongodb.client.model.Filters.not;
 import static com.mongodb.client.model.Filters.or;
+import static java.util.stream.Collectors.toList;
 import static net.pincette.jes.util.JsonFields.DELETED;
 import static net.pincette.jes.util.JsonFields.ID;
 import static net.pincette.jes.util.JsonFields.TYPE;
@@ -15,9 +16,18 @@ import static net.pincette.util.Collections.list;
 
 import com.mongodb.client.model.ReplaceOptions;
 import com.mongodb.client.result.UpdateResult;
+import com.mongodb.reactivestreams.client.FindPublisher;
+import com.mongodb.reactivestreams.client.MongoCollection;
 import com.mongodb.reactivestreams.client.MongoDatabase;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletionStage;
+import java.util.function.UnaryOperator;
 import javax.json.JsonObject;
+import net.pincette.mongo.BsonUtil;
+import net.pincette.mongo.Collection;
+import org.bson.BsonDocument;
+import org.bson.Document;
 import org.bson.conversions.Bson;
 
 /**
@@ -41,6 +51,51 @@ public class Mongo {
    */
   public static Bson addNotDeleted(final Bson query) {
     return and(list(query, NOT_DELETED));
+  }
+
+  /**
+   * Finds JSON objects that match <code>filter</code>.
+   *
+   * @param collection the MongoDB collection.
+   * @param filter the given filter.
+   * @return The list of objects.
+   * @since 1.0.2
+   */
+  public static CompletionStage<List<JsonObject>> find(
+      final MongoCollection<Document> collection, final Bson filter) {
+    return find(collection, filter, null);
+  }
+
+  /**
+   * Finds JSON objects that match <code>filter</code>.
+   *
+   * @param collection the MongoDB collection.
+   * @param filter the given filter.
+   * @param setParameters a function to set the parameters for the result set.
+   * @return The list of objects.
+   * @since 1.0.2
+   */
+  public static CompletionStage<List<JsonObject>> find(
+      final MongoCollection<Document> collection,
+      final Bson filter,
+      final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
+    return Collection.find(collection, filter, BsonDocument.class, setParameters)
+        .thenApply(list -> list.stream().map(BsonUtil::fromBson).collect(toList()));
+  }
+
+  /**
+   * Finds a JSON object. Only one should match the <code>filter</code>, otherwise the result will
+   * be empty.
+   *
+   * @param collection the MongoDB collection.
+   * @param filter the given filter.
+   * @return The optional result.
+   * @since 1.0.2
+   */
+  public static CompletionStage<Optional<JsonObject>> findOne(
+      final MongoCollection<Document> collection, final Bson filter) {
+    return Collection.findOne(collection, filter, BsonDocument.class, null)
+        .thenApply(result -> result.map(BsonUtil::fromBson));
   }
 
   /**

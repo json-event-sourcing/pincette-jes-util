@@ -10,12 +10,19 @@ import static org.apache.kafka.streams.StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_C
 import static org.apache.kafka.streams.StreamsConfig.PROCESSING_GUARANTEE_CONFIG;
 
 import com.typesafe.config.Config;
+import java.time.Duration;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.BiFunction;
+import net.pincette.function.SideEffect;
+import net.pincette.util.TimedCache;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
+import org.apache.kafka.streams.KeyValue;
 import org.apache.kafka.streams.Topology;
 import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
+import org.apache.kafka.streams.kstream.KStream;
 
 /**
  * A few Kafka Streams utilities.
@@ -25,6 +32,36 @@ import org.apache.kafka.streams.errors.LogAndContinueExceptionHandler;
  */
 public class Streams {
   private Streams() {}
+
+  /**
+   * Filters the <code>stream</code> leaving out duplicates according to the <code>criterion</code>
+   * over the time <code>window</code>. The stream will be marked for re-partitioning, but the keys
+   * won't change.
+   *
+   * @param stream the given stream.
+   * @param criterion the given criterion.
+   * @param window the time window to look at.
+   * @param <K> the key type.
+   * @param <V> the value type.
+   * @param <U> the criterion type.
+   * @return The filtered stream.
+   * @since 1.0.2
+   */
+  public static <K, V, U> KStream<K, V> duplicateFilter(
+      final KStream<K, V> stream, final BiFunction<K, V, U> criterion, final Duration window) {
+    final TimedCache<U, U> cache = new TimedCache<>(window);
+
+    return stream
+        .filterNot((k, v) -> cache.get(criterion.apply(k, v)).isPresent())
+        .map(
+            (k, v) ->
+                Optional.of(criterion.apply(k, v))
+                    .map(
+                        c ->
+                            SideEffect.<KeyValue<K, V>>run(() -> cache.put(c, c))
+                                .andThenGet(() -> new KeyValue<>(k, v)))
+                    .orElse(null));
+  }
 
   /**
    * Starting from <code>path</code> all underlying properties are collected in a properties object.
