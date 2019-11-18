@@ -16,6 +16,7 @@ import static net.pincette.util.Collections.list;
 
 import com.mongodb.client.model.ReplaceOptions;
 import com.mongodb.client.result.UpdateResult;
+import com.mongodb.reactivestreams.client.AggregatePublisher;
 import com.mongodb.reactivestreams.client.FindPublisher;
 import com.mongodb.reactivestreams.client.MongoCollection;
 import com.mongodb.reactivestreams.client.MongoDatabase;
@@ -51,6 +52,36 @@ public class Mongo {
    */
   public static Bson addNotDeleted(final Bson query) {
     return and(list(query, NOT_DELETED));
+  }
+
+  /**
+   * Finds JSON objects that come out of <code>pipeline</code>.
+   *
+   * @param collection the MongoDB collection.
+   * @param pipeline the given pipeline.
+   * @return The list of objects.
+   * @since 1.0.4
+   */
+  public static CompletionStage<List<JsonObject>> aggregate(
+      final MongoCollection<Document> collection, final List<? extends Bson> pipeline) {
+    return aggregate(collection, pipeline, null);
+  }
+
+  /**
+   * Finds JSON objects that come out of <code>pipeline</code>.
+   *
+   * @param collection the MongoDB collection.
+   * @param pipeline the given pipeline.
+   * @param setParameters a function to set the parameters for the result set.
+   * @return The list of objects.
+   * @since 1.0.4
+   */
+  public static CompletionStage<List<JsonObject>> aggregate(
+      final MongoCollection<Document> collection,
+      final List<? extends Bson> pipeline,
+      final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
+    return Collection.aggregate(collection, pipeline, BsonDocument.class, setParameters)
+        .thenApply(list -> list.stream().map(BsonUtil::fromBson).collect(toList()));
   }
 
   /**

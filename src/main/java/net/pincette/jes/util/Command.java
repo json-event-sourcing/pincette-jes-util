@@ -4,6 +4,7 @@ import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Stream.concat;
 import static java.util.stream.Stream.of;
 import static javax.json.Json.createObjectBuilder;
+import static net.pincette.jes.util.Commands.PATCH;
 import static net.pincette.jes.util.JsonFields.ACL;
 import static net.pincette.jes.util.JsonFields.ACL_WRITE;
 import static net.pincette.jes.util.JsonFields.COMMAND;
@@ -171,7 +172,7 @@ public class Command {
         && json.containsKey(CORR)
         && json.containsKey(TYPE)
         && json.containsKey(COMMAND)
-        && !json.containsKey(OPS);
+        && (PATCH.equals(json.getString(COMMAND)) || !json.containsKey(OPS));
   }
 
   /**
