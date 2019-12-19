@@ -7,10 +7,10 @@
   <groupId>net.pincette</groupId>
   <artifactId>pincette-jes-util</artifactId>
   <packaging>jar</packaging>
-  <version>1.0.4</version>
+  <version>1.1</version>
   <name>pincette-jes-util</name>
   <description>Utilities to work with pincette-jes</description>
-  <url>https://github.com/wdonne/pincette-jes-util</url>
+  <url>https://github.com/json-event-sourcing/pincette-jes-util</url>
 
   <organization>
     <name>Pincette</name>
@@ -18,9 +18,9 @@
   </organization>
 
   <scm>
-    <url>https://github.com/wdonne/pincette-jes-util</url>
-    <connection>scm:git@github.com:wdonne/pincette-jes-util.git</connection>
-    <developerConnection>scm:git@github.com:wdonne/pincette-jes-util.git</developerConnection>
+    <url>https://github.com/json-event-sourcing/pincette-jes-util</url>
+    <connection>scm:git@github.com:json-event-sourcing/pincette-jes-util.git</connection>
+    <developerConnection>scm:git@github.com:json-event-sourcing/pincette-jes-util.git</developerConnection>
   </scm>
 
   <developers>
@@ -67,17 +67,22 @@
     <dependency>
       <groupId>org.mongodb</groupId>
       <artifactId>bson</artifactId>
-      <version>3.11.1</version>
+      <version>3.12.0</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-common</artifactId>
-      <version>1.6.3</version>
+      <version>1.6.5</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-mongo</artifactId>
       <version>1.0.1</version>
+    </dependency>
+    <dependency>
+      <groupId>net.pincette</groupId>
+      <artifactId>pincette-rs</artifactId>
+      <version>1.1</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -97,7 +102,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.dataformat</groupId>
       <artifactId>jackson-dataformat-cbor</artifactId>
-      <version>2.10.0</version>
+      <version>2.10.1</version>
     </dependency>
   </dependencies>
 
@@ -134,6 +139,30 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <version>3.1.1</version>
+        <configuration>
+          <additionalJOptions>
+            <additionalJOption>-J-Dhttp.agent=maven-javadoc-plugin-${project.name}</additionalJOption>
+          </additionalJOptions>
+          <links>
+            <link>http://docs.oracle.com/javase/8/docs/api/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-common/1.6.5/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-mongo/1.0.1/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/1.1/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-jsonfilter/0.4.0/</link>
+            <link>https://www.javadoc.io/doc/javax.json/javax.json-api/1.1.4/</link>
+            <link>https://www.javadoc.io/doc/org.apache.kafka/kafka-clients/2.3.1/</link>
+            <link>https://www.javadoc.io/doc/org.apache.kafka/kafka-streams/2.3.1/</link>
+            <link>https://www.javadoc.io/doc/org.mongodb/bson-streams/3.12.0/</link>
+            <link>https://www.javadoc.io/doc/org.typesafe/config-streams/1.3.4/</link>
+            <link>https://www.javadoc.io/doc/org.asynchttpclient/async-http-client/2.10.4/</link>
+            <link>https://www.javadoc.io/doc/com.fasterxml.jackson.dataformat/jackson-dataformat-cbor/2.10.1/</link>
+          </links>
+        </configuration>
       </plugin>
     </plugins>
   </build>

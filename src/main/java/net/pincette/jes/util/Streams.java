@@ -63,6 +63,16 @@ public class Streams {
                     .orElse(null));
   }
 
+  private static Properties copy(final Properties properties) {
+    final Properties result = new Properties();
+
+    properties
+        .stringPropertyNames()
+        .forEach(name -> result.setProperty(name, properties.getProperty(name)));
+
+    return result;
+  }
+
   /**
    * Starting from <code>path</code> all underlying properties are collected in a properties object.
    * If there is structure in the underlying properties then they are flattened, resulting in
@@ -78,7 +88,7 @@ public class Streams {
         .reduce(
             new Properties(),
             (p, e) -> {
-              p.put(e.getKey(), e.getValue().unwrapped());
+              p.put(e.getKey(), e.getValue().unwrapped().toString());
               return p;
             },
             (p1, p2) -> p1);
@@ -101,15 +111,8 @@ public class Streams {
     final boolean[] error = new boolean[1];
     final CountDownLatch latch = new CountDownLatch(1);
 
-    properties.put(
-        DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG,
-        LogAndContinueExceptionHandler.class);
-    properties.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
-    properties.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, JsonSerde.class);
-    properties.put(PROCESSING_GUARANTEE_CONFIG, AT_LEAST_ONCE);
-
     return tryToGetWithRethrow(
-            () -> new KafkaStreams(topology, properties),
+            () -> new KafkaStreams(topology, streamsConfig(properties)),
             streams -> {
               streams.setStateListener(
                   (newState, oldState) -> {
@@ -133,5 +136,39 @@ public class Streams {
               return !error[0];
             })
         .orElse(false);
+  }
+
+  /**
+   * Creates a new properties object with the default values for the streams configuration. It sets
+   * the JSON serializer. The processing guarantee is set to "at least once". This is done only when
+   * those properties are not yet present in <code>kafkaConfig</code>.
+   *
+   * @param kafkaConfig the given Kafka configuration.
+   * @return The new configuration with the default values.
+   * @see JsonSerde
+   * @since 1.1
+   */
+  public static Properties streamsConfig(final Properties kafkaConfig) {
+    final Properties result = copy(kafkaConfig);
+
+    if (result.getProperty(DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG) == null) {
+      result.put(
+          DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG,
+          LogAndContinueExceptionHandler.class);
+    }
+
+    if (result.getProperty(DEFAULT_KEY_SERDE_CLASS_CONFIG) == null) {
+      result.put(DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
+    }
+
+    if (result.getProperty(DEFAULT_VALUE_SERDE_CLASS_CONFIG) == null) {
+      result.put(DEFAULT_VALUE_SERDE_CLASS_CONFIG, JsonSerde.class);
+    }
+
+    if (result.getProperty(PROCESSING_GUARANTEE_CONFIG) == null) {
+      result.put(PROCESSING_GUARANTEE_CONFIG, AT_LEAST_ONCE);
+    }
+
+    return result;
   }
 }
