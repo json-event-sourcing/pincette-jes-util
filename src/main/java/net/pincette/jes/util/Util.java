@@ -4,8 +4,8 @@ import static java.util.concurrent.CompletableFuture.completedFuture;
 import static net.pincette.jes.util.JsonFields.ID;
 import static net.pincette.jes.util.JsonFields.SEQ;
 import static net.pincette.jes.util.JsonFields.TYPE;
-import static net.pincette.util.Json.getString;
-import static net.pincette.util.Json.hasErrors;
+import static net.pincette.json.JsonUtil.getString;
+import static net.pincette.json.Validate.hasErrors;
 
 import java.util.Optional;
 import javax.json.JsonObject;

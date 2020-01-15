@@ -6,7 +6,7 @@ import static java.util.concurrent.CompletableFuture.completedFuture;
 import static javax.json.Json.createArrayBuilder;
 import static javax.json.Json.createObjectBuilder;
 import static net.pincette.jes.util.Util.getUsername;
-import static net.pincette.util.Json.string;
+import static net.pincette.json.JsonUtil.string;
 import static net.pincette.util.Util.tryToGetRethrow;
 import static org.asynchttpclient.Dsl.asyncHttpClient;
 

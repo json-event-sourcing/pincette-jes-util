@@ -3,7 +3,7 @@ package net.pincette.jes.util;
 import static com.fasterxml.jackson.dataformat.cbor.CBORFactory.builder;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static javax.json.stream.JsonParser.Event.START_OBJECT;
-import static net.pincette.util.Json.from;
+import static net.pincette.json.JsonUtil.from;
 import static net.pincette.util.Util.tryToGetWithSilent;
 
 import com.fasterxml.jackson.dataformat.cbor.CBORFactory;
@@ -14,9 +14,9 @@ import java.util.zip.GZIPInputStream;
 import javax.json.JsonObject;
 import javax.json.JsonValue;
 import javax.json.stream.JsonParser;
-import net.pincette.jf.JacksonParser;
-import net.pincette.jf.JsonParserWrapper;
-import net.pincette.util.Json;
+import net.pincette.json.JsonUtil;
+import net.pincette.json.filter.JacksonParser;
+import net.pincette.json.filter.JsonParserWrapper;
 import org.apache.kafka.common.serialization.Deserializer;
 
 /**
@@ -37,7 +37,7 @@ public class JsonDeserializer implements Deserializer<JsonObject> {
   }
 
   private static Optional<JsonObject> parse(final byte[] bytes) {
-    return from(new String(bytes, UTF_8)).filter(Json::isObject).map(JsonValue::asJsonObject);
+    return from(new String(bytes, UTF_8)).filter(JsonUtil::isObject).map(JsonValue::asJsonObject);
   }
 
   @Override

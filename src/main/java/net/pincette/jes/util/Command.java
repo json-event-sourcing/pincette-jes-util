@@ -15,10 +15,10 @@ import static net.pincette.jes.util.JsonFields.JWT;
 import static net.pincette.jes.util.JsonFields.OPS;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.getUsername;
+import static net.pincette.json.JsonUtil.getArray;
+import static net.pincette.json.JsonUtil.getBoolean;
 import static net.pincette.util.Builder.create;
 import static net.pincette.util.Collections.intersection;
-import static net.pincette.util.Json.getArray;
-import static net.pincette.util.Json.getBoolean;
 import static net.pincette.util.Or.tryWith;
 
 import java.util.Optional;
@@ -28,7 +28,7 @@ import javax.json.JsonArray;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonString;
-import net.pincette.util.Json;
+import net.pincette.json.JsonUtil;
 
 /**
  * Some command utilities.
@@ -188,6 +188,9 @@ public class Command {
   }
 
   private static Stream<String> toStrings(final JsonArray array) {
-    return array.stream().filter(Json::isString).map(Json::asString).map(JsonString::getString);
+    return array.stream()
+        .filter(JsonUtil::isString)
+        .map(JsonUtil::asString)
+        .map(JsonString::getString);
   }
 }

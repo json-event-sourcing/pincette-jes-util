@@ -22,6 +22,7 @@ import static net.pincette.jes.util.JsonFields.SEQ;
 import static net.pincette.jes.util.JsonFields.TIMESTAMP;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.isManagedObject;
+import static net.pincette.json.JsonUtil.emptyObject;
 import static net.pincette.mongo.BsonUtil.fromJson;
 import static net.pincette.mongo.BsonUtil.toDocument;
 import static net.pincette.mongo.Collection.replaceOne;
@@ -29,7 +30,6 @@ import static net.pincette.rs.Chain.with;
 import static net.pincette.rs.Reducer.reduce;
 import static net.pincette.util.Builder.create;
 import static net.pincette.util.Collections.list;
-import static net.pincette.util.Json.emptyObject;
 import static net.pincette.util.Util.must;
 
 import com.mongodb.client.model.ReplaceOptions;
@@ -43,9 +43,9 @@ import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.function.UnaryOperator;
 import javax.json.JsonObject;
+import net.pincette.json.JsonUtil;
 import net.pincette.mongo.BsonUtil;
 import net.pincette.mongo.Collection;
-import net.pincette.util.Json;
 import org.bson.BsonDocument;
 import org.bson.Document;
 import org.bson.conversions.Bson;
@@ -244,7 +244,7 @@ public class Mongo {
         aggregationPublisher(
             database.getCollection(type + "-event-" + environment),
             list(match(regex(ID, "^" + id + ".*")), sort(ascending(ID)))),
-        Json::emptyObject,
+        JsonUtil::emptyObject,
         Mongo::applyEvent);
   }
 

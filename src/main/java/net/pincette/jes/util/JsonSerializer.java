@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.zip.GZIPOutputStream;
 import javax.json.JsonObject;
-import net.pincette.jf.JacksonGenerator;
+import net.pincette.json.filter.JacksonGenerator;
 import org.apache.kafka.common.serialization.Serializer;
 
 /**

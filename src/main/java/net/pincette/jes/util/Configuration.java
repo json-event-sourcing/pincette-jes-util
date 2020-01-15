@@ -1,15 +1,13 @@
 package net.pincette.jes.util;
 
-import static com.typesafe.config.ConfigFactory.load;
+import static com.typesafe.config.ConfigFactory.parseFile;
 import static java.lang.System.getProperty;
+import static net.pincette.util.Util.tryToGetRethrow;
 import static net.pincette.util.Util.tryToGetSilent;
-import static net.pincette.util.Util.tryToGetWithRethrow;
 
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import java.io.File;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.Optional;
 
 /**
@@ -32,16 +30,11 @@ public class Configuration {
    * @since 1.0
    */
   public static Config loadDefault() {
-    return tryToGetWithRethrow(
+    return Optional.ofNullable(getProperty("config.resource"))
+        .flatMap(resource -> tryToGetRethrow(() -> parseFile(new File(new File("conf"), resource))))
+        .orElseGet(
             () ->
-                new URLClassLoader(
-                    new URL[] {
-                      tryToGetSilent(() -> new File("conf/").toURI().toURL()).orElse(null)
-                    }),
-            classLoader ->
-                Optional.ofNullable(getProperty("config.resource"))
-                    .map(config -> load(classLoader, config))
-                    .orElseGet(() -> load(classLoader)))
-        .orElseGet(ConfigFactory::empty);
+                tryToGetSilent(() -> parseFile(new File(new File("conf"), "application.conf")))
+                    .orElseGet(ConfigFactory::load));
   }
 }

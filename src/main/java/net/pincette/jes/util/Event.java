@@ -6,13 +6,13 @@ import static net.pincette.jes.util.JsonFields.OPS;
 import static net.pincette.jes.util.JsonFields.SEQ;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.isManagedObject;
-import static net.pincette.util.Json.getValue;
+import static net.pincette.json.JsonUtil.getValue;
 import static net.pincette.util.Pair.pair;
 
 import java.util.Optional;
 import javax.json.JsonObject;
 import javax.json.JsonValue;
-import net.pincette.util.Json;
+import net.pincette.json.Patch;
 
 /**
  * Utilities to work with events.
@@ -34,7 +34,7 @@ public class Event {
    */
   public static boolean changed(final JsonObject event, final String jsonPointer) {
     return Optional.ofNullable(event.getJsonArray(OPS))
-        .map(ops -> Json.changed(ops, jsonPointer))
+        .map(ops -> Patch.changed(ops, jsonPointer))
         .orElse(false);
   }
 
@@ -62,7 +62,7 @@ public class Event {
                                 .filter(value -> value.equals(from))
                                 .isPresent())
                     .map(before -> pair(ops, before)))
-        .map(pair -> Json.changed(pair.first, pair.second, jsonPointer, from, to))
+        .map(pair -> Patch.changed(pair.first, pair.second, jsonPointer, from, to))
         .orElse(false);
   }
 
