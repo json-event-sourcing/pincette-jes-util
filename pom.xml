@@ -7,7 +7,7 @@
   <groupId>net.pincette</groupId>
   <artifactId>pincette-jes-util</artifactId>
   <packaging>jar</packaging>
-  <version>1.1.1</version>
+  <version>1.1.2</version>
   <name>pincette-jes-util</name>
   <description>Utilities to work with pincette-jes</description>
   <url>https://github.com/json-event-sourcing/pincette-jes-util</url>
@@ -67,7 +67,7 @@
     <dependency>
       <groupId>org.mongodb</groupId>
       <artifactId>bson</artifactId>
-      <version>3.12.0</version>
+      <version>3.12.1</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -77,12 +77,12 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-mongo</artifactId>
-      <version>1.0.1</version>
+      <version>1.1</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-rs</artifactId>
-      <version>1.1</version>
+      <version>1.2</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -150,17 +150,16 @@
           </additionalJOptions>
           <links>
             <link>http://docs.oracle.com/javase/8/docs/api/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-common/1.6.5/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-mongo/1.0.1/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/1.1/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-jsonfilter/0.4.0/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-common/1.6.6/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-mongo/1.1/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/1.2/</link>
             <link>https://www.javadoc.io/doc/javax.json/javax.json-api/1.1.4/</link>
             <link>https://www.javadoc.io/doc/org.apache.kafka/kafka-clients/2.3.1/</link>
             <link>https://www.javadoc.io/doc/org.apache.kafka/kafka-streams/2.3.1/</link>
-            <link>https://www.javadoc.io/doc/org.mongodb/bson-streams/3.12.0/</link>
+            <link>https://www.javadoc.io/doc/org.mongodb/bson-streams/3.12.1/</link>
             <link>https://www.javadoc.io/doc/org.typesafe/config-streams/1.3.4/</link>
             <link>https://www.javadoc.io/doc/org.asynchttpclient/async-http-client/2.10.4/</link>
-            <link>https://www.javadoc.io/doc/com.fasterxml.jackson.dataformat/jackson-dataformat-cbor/2.10.1/</link>
+            <link>https://www.javadoc.io/doc/com.fasterxml.jackson.dataformat/jackson-dataformat-cbor/2.10.2/</link>
           </links>
         </configuration>
       </plugin>

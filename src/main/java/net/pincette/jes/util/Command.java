@@ -15,6 +15,7 @@ import static net.pincette.jes.util.JsonFields.JWT;
 import static net.pincette.jes.util.JsonFields.OPS;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.getUsername;
+import static net.pincette.jes.util.Util.isJesObject;
 import static net.pincette.json.JsonUtil.getArray;
 import static net.pincette.json.JsonUtil.getBoolean;
 import static net.pincette.util.Builder.create;
@@ -167,10 +168,8 @@ public class Command {
    * @since 1.0
    */
   public static boolean isCommand(final JsonObject json) {
-    return json != null
-        && json.containsKey(ID)
+    return isJesObject(json)
         && json.containsKey(CORR)
-        && json.containsKey(TYPE)
         && json.containsKey(COMMAND)
         && (PATCH.equals(json.getString(COMMAND)) || !json.containsKey(OPS));
   }

@@ -51,6 +51,19 @@ public class Util {
   }
 
   /**
+   * Checks if <code>json</code> is a JSON Event Sourcing object. This means it has the fields
+   * <code>_id</code> and <code>_type</code>.
+   *
+   * @param json the given object.
+   * @return The check report.
+   * @see JsonFields
+   * @since 1.1.2
+   */
+  public static boolean isJesObject(final JsonObject json) {
+    return json != null && json.containsKey(ID) && json.containsKey(TYPE);
+  }
+
+  /**
    * Checks if <code>json</code> is a managed object. This means it has the fields <code>_id</code>,
    * <code>_type</code> and <code>_seq</code>.
    *
@@ -60,7 +73,7 @@ public class Util {
    * @since 1.0
    */
   public static boolean isManagedObject(final JsonObject json) {
-    return json != null && json.containsKey(ID) && json.containsKey(TYPE) && json.containsKey(SEQ);
+    return isJesObject(json) && json.containsKey(SEQ);
   }
 
   /**
@@ -74,11 +87,10 @@ public class Util {
    * @since 1.0
    */
   public static boolean isManagedObject(final JsonObject json, final String type, final String id) {
-    return json != null
+    return isManagedObject(json)
         && type != null
         && id != null
-        && type.equals(json.getString(TYPE, null))
-        && id.equalsIgnoreCase(json.getString(ID, null))
-        && json.containsKey(SEQ);
+        && type.equals(json.getString(TYPE))
+        && id.equalsIgnoreCase(json.getString(ID));
   }
 }
