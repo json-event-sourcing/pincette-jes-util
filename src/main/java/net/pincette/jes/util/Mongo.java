@@ -12,6 +12,8 @@ import static com.mongodb.client.model.Filters.regex;
 import static com.mongodb.client.model.Sorts.ascending;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 import static javax.json.Json.createObjectBuilder;
 import static javax.json.Json.createPatch;
 import static net.pincette.jes.util.Command.isCommand;
@@ -25,7 +27,11 @@ import static net.pincette.jes.util.JsonFields.SEQ;
 import static net.pincette.jes.util.JsonFields.TIMESTAMP;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.isManagedObject;
+import static net.pincette.json.JsonUtil.add;
+import static net.pincette.json.JsonUtil.copy;
 import static net.pincette.json.JsonUtil.emptyObject;
+import static net.pincette.json.JsonUtil.isObject;
+import static net.pincette.json.Transform.transform;
 import static net.pincette.mongo.BsonUtil.fromJson;
 import static net.pincette.mongo.BsonUtil.toDocument;
 import static net.pincette.mongo.Collection.insertOne;
@@ -34,6 +40,8 @@ import static net.pincette.rs.Chain.with;
 import static net.pincette.rs.Reducer.reduce;
 import static net.pincette.util.Builder.create;
 import static net.pincette.util.Collections.list;
+import static net.pincette.util.Pair.pair;
+import static net.pincette.util.StreamUtil.composeAsyncStream;
 import static net.pincette.util.Util.must;
 
 import com.mongodb.client.model.ReplaceOptions;
@@ -44,12 +52,17 @@ import com.mongodb.reactivestreams.client.FindPublisher;
 import com.mongodb.reactivestreams.client.MongoCollection;
 import com.mongodb.reactivestreams.client.MongoDatabase;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import java.util.stream.Stream;
 import javax.json.JsonObject;
 import net.pincette.json.JsonUtil;
+import net.pincette.json.Transform.JsonEntry;
+import net.pincette.json.Transform.Transformer;
 import net.pincette.mongo.BsonUtil;
 import net.pincette.mongo.Collection;
 import org.bson.BsonDocument;
@@ -65,6 +78,8 @@ import org.reactivestreams.Publisher;
  */
 public class Mongo {
   public static final Bson NOT_DELETED = or(list(not(exists(DELETED)), eq(DELETED, false)));
+  private static final String HREF = "href";
+  private static final String RESOLVED = "_resolved";
 
   private Mongo() {}
 
@@ -222,6 +237,10 @@ public class Mongo {
     return json.getString(TYPE) + collectionInfix(json) + environment;
   }
 
+  private static String collection(final Href href, final String environment) {
+    return href.type + "-" + environment;
+  }
+
   private static String collectionInfix(final JsonObject json) {
     final Supplier<String> tryCommand = () -> isCommand(json) ? "-command-" : "-";
 
@@ -230,6 +249,21 @@ public class Mongo {
 
   private static String eventCollection(final String type, final String environment) {
     return type + "-event-" + environment;
+  }
+
+  private static CompletionStage<Map<Href, JsonObject>> fetchHrefs(
+      final Set<Href> hrefs, final String environment, final MongoDatabase database) {
+    return composeAsyncStream(
+            hrefs.stream()
+                .map(
+                    href ->
+                        findHref(href, environment, database)
+                            .thenApply(j -> pair(href, j.orElse(null)))))
+        .thenApply(
+            stream ->
+                stream
+                    .filter(pair -> pair.second != null)
+                    .collect(toMap(pair -> pair.first, pair -> pair.second)));
   }
 
   /**
@@ -293,6 +327,21 @@ public class Mongo {
       final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
     return Collection.find(collection, session, filter, BsonDocument.class, setParameters)
         .thenApply(Mongo::toJson);
+  }
+
+  /**
+   * Fetches the aggregate denoted by <code>href</code>.
+   *
+   * @param href the given href.
+   * @param environment the environment in which the aggregate lives, e.g. test, acceptance,
+   *     production, etc. This is added as a suffix to the collection name.
+   * @param database the MongoDB database.
+   * @return The aggregate instance.
+   * @since 1.1.3
+   */
+  public static CompletionStage<Optional<JsonObject>> findHref(
+      final Href href, final String environment, final MongoDatabase database) {
+    return findOne(database.getCollection(collection(href, environment)), eq(ID, href.id));
   }
 
   /**
@@ -380,6 +429,17 @@ public class Mongo {
       final MongoCollection<Document> collection, final ClientSession session, final Bson filter) {
     return Collection.findOne(collection, session, filter, BsonDocument.class, null)
         .thenApply(result -> result.map(BsonUtil::fromBson));
+  }
+
+  private static boolean hrefOnly(final JsonObject json) {
+    return json.containsKey(HREF) && json.size() == 1;
+  }
+
+  private static Set<Href> hrefs(final Stream<JsonObject> json) {
+    return json.flatMap(JsonUtil::nestedObjects)
+        .filter(Mongo::hrefOnly)
+        .map(j -> new Href(j.getString(HREF)))
+        .collect(toSet());
   }
 
   /**
@@ -525,6 +585,63 @@ public class Mongo {
   }
 
   /**
+   * This resolves all "href" fields in subobjects that contain only a "href" field. The object
+   * referred to by a href is fetched and its fields are added to the subject. Those fields must not
+   * be changed by a reducer.
+   *
+   * @param json the given JSON object.
+   * @param environment the environment in which the aggregate lives, e.g. test, acceptance,
+   *     production, etc. This is added as a suffix to the collection name.
+   * @param database the MongoDB database.
+   * @return The resolved JSON object.
+   * @since 1.1.3
+   */
+  public static CompletionStage<JsonObject> resolve(
+      final JsonObject json, final String environment, final MongoDatabase database) {
+    return resolve(list(json), environment, database).thenApply(list -> list.get(0));
+  }
+
+  /**
+   * This resolves all "href" fields in subobjects that contain only a "href" field. The object
+   * referred to by a href is fetched and its fields are added to the subject. Those fields must not
+   * be changed by a reducer.
+   *
+   * @param json the given JSON objects. Common "href" fields will be fetched only once.
+   * @param environment the environment in which the aggregate lives, e.g. test, acceptance,
+   *     production, etc. This is added as a suffix to the collection name.
+   * @param database the MongoDB database.
+   * @return The resolved aggregate.
+   * @since 1.1.3
+   */
+  public static CompletionStage<List<JsonObject>> resolve(
+      final List<JsonObject> json, final String environment, final MongoDatabase database) {
+    return Optional.of(hrefs(json.stream()))
+        .filter(hrefs -> !hrefs.isEmpty())
+        .map(
+            hrefs ->
+                fetchHrefs(hrefs, environment, database)
+                    .thenApply(map -> json.stream().map(j -> resolve(j, map)).collect(toList())))
+        .orElseGet(() -> completedFuture(json));
+  }
+
+  private static JsonObject resolve(
+      final JsonObject json, final Map<Href, JsonObject> fetchedHrefs) {
+    return transform(
+        json,
+        new Transformer(
+            entry -> isObject(entry.value) && hrefOnly(entry.value.asJsonObject()),
+            entry ->
+                Optional.of(
+                    new JsonEntry(
+                        entry.path,
+                        add(
+                                createObjectBuilder(entry.value.asJsonObject()).add(RESOLVED, true),
+                                fetchedHrefs.get(
+                                    new Href(entry.value.asJsonObject().getString(HREF))))
+                            .build()))));
+  }
+
+  /**
    * Restores the latest version of an aggregate in the aggregate snapshot collection using its
    * event log. If the snapshot is already the latest version then nothing is updated.
    *
@@ -657,5 +774,47 @@ public class Mongo {
             ? replaceOne(mongoCollection, session, filter, document, options)
             : replaceOne(mongoCollection, filter, document, options))
         .thenApply(UpdateResult::wasAcknowledged);
+  }
+
+  /**
+   * This removes the additions made by the <code>resolve</code> method.
+   *
+   * @param aggregate the given aggregate instance.
+   * @return The unresolved aggregate instance.
+   * @since 1.1.3
+   */
+  public static JsonObject unresolve(final JsonObject aggregate) {
+    return transform(
+        aggregate,
+        new Transformer(
+            entry -> isObject(entry.value) && entry.value.asJsonObject().containsKey(RESOLVED),
+            entry ->
+                Optional.of(
+                    new JsonEntry(
+                        entry.path,
+                        copy(
+                                entry.value.asJsonObject(),
+                                createObjectBuilder(),
+                                key -> key.equals(HREF))
+                            .build()))));
+  }
+
+  /**
+   * Wraps the <code>reducer</code> with a function that resolves the current state and unresolves
+   * the result.
+   *
+   * @param reducer the given reducer.
+   * @param environment the environment in which the aggregate lives, e.g. test, acceptance,
+   *     production, etc. This is added as a suffix to the collection name.
+   * @param database the MongoDB database.
+   * @return The new aggregate instance.
+   * @since 1.1.3
+   */
+  public static Reducer withResolver(
+      final Reducer reducer, final String environment, final MongoDatabase database) {
+    return (command, state) ->
+        resolve(list(command, state), environment, database)
+            .thenComposeAsync(resolved -> reducer.apply(resolved.get(0), resolved.get(1)))
+            .thenApply(Mongo::unresolve);
   }
 }

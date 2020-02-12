@@ -1,5 +1,6 @@
 package net.pincette.jes.util;
 
+import static java.util.Objects.hash;
 import static net.pincette.util.Util.getSegments;
 import static net.pincette.util.Util.tryToGetRethrow;
 
@@ -110,6 +111,19 @@ public class Href {
                 : tryToGetRethrow(() -> new URI(href)).map(URI::getPath).orElse(""),
             "/")
         .toArray(String[]::new);
+  }
+
+  @Override
+  public boolean equals(final Object other) {
+    return other instanceof Href
+        && ((Href) other).app.equals(app)
+        && ((Href) other).type.equals(type)
+        && ((Href) other).id.equals(id);
+  }
+
+  @Override
+  public int hashCode() {
+    return hash(app, id, type);
   }
 
   /**

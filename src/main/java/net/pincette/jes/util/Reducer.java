@@ -5,7 +5,7 @@ import java.util.function.BiFunction;
 import javax.json.JsonObject;
 
 /**
- * The first argument is the current state of the aggregate. The second one is the command.
+ * The first argument is the command. The second one is the current state of the aggregate.
  *
  * @author Werner Donn\u00e9
  * @since 1.0

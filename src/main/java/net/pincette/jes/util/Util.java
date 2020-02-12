@@ -29,14 +29,14 @@ public class Util {
    * @since 1.0
    */
   public static Reducer compose(final Reducer validator, final Reducer reducer) {
-    return (aggregate, command) ->
+    return (command, aggregate) ->
         validator
-            .apply(aggregate, command)
+            .apply(command, aggregate)
             .thenComposeAsync(
                 result ->
                     hasErrors(result)
                         ? completedFuture(result)
-                        : reducer.apply(aggregate, command));
+                        : reducer.apply(command, aggregate));
   }
 
   /**
