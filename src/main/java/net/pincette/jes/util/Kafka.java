@@ -2,17 +2,24 @@ package net.pincette.jes.util;
 
 import static java.util.Collections.unmodifiableMap;
 import static java.util.stream.Collectors.toMap;
+import static net.pincette.jes.util.JsonFields.CORR;
 import static net.pincette.util.Collections.map;
 import static net.pincette.util.Collections.merge;
 import static net.pincette.util.Pair.pair;
+import static org.apache.kafka.streams.kstream.JoinWindows.of;
 
 import com.typesafe.config.Config;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import javax.json.JsonObject;
+import net.pincette.util.Pair;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.Serializer;
+import org.apache.kafka.streams.KeyValue;
+import org.apache.kafka.streams.kstream.KStream;
 
 /**
  * Some Kafka utilities.
@@ -32,6 +39,23 @@ public class Kafka {
               pair("max.in.flight.requests.per.connection", 1)));
 
   private Kafka() {}
+
+  /**
+   * Joins two streams on the <code>_corr</code> field. The result is keyed on that field, with the
+   * values of both streams paired.
+   *
+   * @param stream1 the first stream.
+   * @param stream2 the second stream.
+   * @param window the join window.
+   * @return The joined stream of pairs.
+   * @since 1.1.4
+   */
+  public static KStream<String, Pair<JsonObject, JsonObject>> correlate(
+      final KStream<String, JsonObject> stream1,
+      final KStream<String, JsonObject> stream2,
+      final Duration window) {
+    return toCorr(stream1).join(toCorr(stream2), Pair::pair, of(window));
+  }
 
   /**
    * This creates a fail fast Kafka producer that demands full acknowledgement of sent messages.
@@ -92,5 +116,11 @@ public class Kafka {
         });
 
     return completableFuture;
+  }
+
+  private static KStream<String, JsonObject> toCorr(final KStream<String, JsonObject> stream) {
+    return stream
+        .filter((k, v) -> v.containsKey(CORR))
+        .map((k, v) -> new KeyValue<>(v.getString(CORR).toLowerCase(), v));
   }
 }
