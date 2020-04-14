@@ -12,6 +12,7 @@ import static net.pincette.jes.util.JsonFields.SUBSCRIPTIONS;
 import static net.pincette.jes.util.Util.getUsername;
 import static net.pincette.json.JsonUtil.getObjects;
 import static net.pincette.json.JsonUtil.string;
+import static net.pincette.util.Collections.difference;
 import static net.pincette.util.Collections.union;
 import static net.pincette.util.Util.tryToGet;
 import static net.pincette.util.Util.tryToGetRethrow;
@@ -51,9 +52,28 @@ public class Fanout {
    */
   public static void connect(
       final KStream<String, JsonObject> replies, final String realmId, final String realmKey) {
+    connect(replies, null, realmId, realmKey);
+  }
+
+  /**
+   * Sets up Kafka Streams to connect the stream of replies of an aggregate to fanout channels base
+   * on the username in the replies.
+   *
+   * @param replies the replies Kafka stream.
+   * @param exclude the usernames that should be excluded from the message. It may be <code>null
+   *     </code>.
+   * @param realmId the realm ID of the fanout account.
+   * @param realmKey the realm key of the fanout account.
+   * @since 1.2
+   */
+  public static void connect(
+      final KStream<String, JsonObject> replies,
+      final Set<String> exclude,
+      final String realmId,
+      final String realmKey) {
     replies.mapValues(
         v ->
-            tryToGetRethrow(() -> send(v, realmId, realmKey).toCompletableFuture().get())
+            tryToGetRethrow(() -> send(v, exclude, realmId, realmKey).toCompletableFuture().get())
                 .orElse(false));
   }
 
@@ -73,10 +93,32 @@ public class Fanout {
       final String realmId,
       final String realmKey,
       final Logger logger) {
+    connect(replies, null, realmId, realmKey, logger);
+  }
+
+  /**
+   * Sets up Kafka Streams to connect the stream of replies of an aggregate to fanout channels base
+   * on the username in the replies.
+   *
+   * @param replies the replies Kafka stream.
+   * @param exclude the usernames that should be excluded from the message. It may be <code>null
+   *     </code>.
+   * @param realmId the realm ID of the fanout account.
+   * @param realmKey the realm key of the fanout account.
+   * @param logger the logger to which the exceptions will be sent. This means the consumer offset
+   *     will be committed in any case.
+   * @since 1.2
+   */
+  public static void connect(
+      final KStream<String, JsonObject> replies,
+      final Set<String> exclude,
+      final String realmId,
+      final String realmKey,
+      final Logger logger) {
     replies.mapValues(
         v ->
             tryToGet(
-                    () -> send(v, realmId, realmKey).toCompletableFuture().get(),
+                    () -> send(v, exclude, realmId, realmKey).toCompletableFuture().get(),
                     e ->
                         SideEffect.<Boolean>run(() -> logger.log(SEVERE, e.getMessage(), e))
                             .andThenGet(() -> false))
@@ -116,8 +158,8 @@ public class Fanout {
   }
 
   /**
-   * Sends a message to a fanout channel if the username if present in the field <code>/_jwt/sub
-   * </code>.
+   * Sends a message to the fanout channels if the username is present in the field <code>/_jwt/sub
+   * </code> and/or in the <code>_subscriptions</code> field.
    *
    * @param json the message.
    * @param realmId the realm ID of the fanout account.
@@ -127,7 +169,27 @@ public class Fanout {
    */
   public static CompletionStage<Boolean> send(
       final JsonObject json, final String realmId, final String realmKey) {
-    return usernames(json)
+    return send(json, null, realmId, realmKey);
+  }
+
+  /**
+   * Sends a message to the fanout channels if the username is present in the field <code>/_jwt/sub
+   * </code> and/or in the <code>_subscriptions</code> field.
+   *
+   * @param json the message.
+   * @param exclude the usernames that should be excluded from the message. It may be <code>null
+   *     </code>.
+   * @param realmId the realm ID of the fanout account.
+   * @param realmKey the realm key of the fanout account.
+   * @return Whether it has succeeded or not.
+   * @since 1.2
+   */
+  public static CompletionStage<Boolean> send(
+      final JsonObject json,
+      final Set<String> exclude,
+      final String realmId,
+      final String realmKey) {
+    return usernames(json, exclude != null ? exclude : new HashSet<>())
         .map(
             usernames ->
                 client
@@ -154,10 +216,13 @@ public class Fanout {
     return "https://api.fanout.io/realm/" + realmId + "/publish/";
   }
 
-  private static Optional<Set<String>> usernames(final JsonObject json) {
+  private static Optional<Set<String>> usernames(final JsonObject json, final Set<String> exclude) {
     return Optional.of(
-            union(
-                getUsername(json).map(Collections::set).orElseGet(HashSet::new), subscribers(json)))
+            difference(
+                union(
+                    getUsername(json).map(Collections::set).orElseGet(HashSet::new),
+                    subscribers(json)),
+                exclude))
         .filter(usernames -> !usernames.isEmpty());
   }
 }

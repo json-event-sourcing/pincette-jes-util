@@ -18,6 +18,7 @@ import static net.pincette.jes.util.Util.getUsername;
 import static net.pincette.jes.util.Util.isJesObject;
 import static net.pincette.json.JsonUtil.getArray;
 import static net.pincette.json.JsonUtil.getBoolean;
+import static net.pincette.json.JsonUtil.getString;
 import static net.pincette.util.Builder.create;
 import static net.pincette.util.Collections.intersection;
 import static net.pincette.util.Or.tryWith;
@@ -169,8 +170,8 @@ public class Command {
    */
   public static boolean isCommand(final JsonObject json) {
     return isJesObject(json)
-        && json.containsKey(CORR)
-        && json.containsKey(COMMAND)
+        && getString(json, "/" + CORR).isPresent()
+        && getString(json, "/" + COMMAND).isPresent()
         && (PATCH.equals(json.getString(COMMAND)) || !json.containsKey(OPS));
   }
 
@@ -183,7 +184,7 @@ public class Command {
    * @since 1.0
    */
   public static boolean isCommand(final JsonObject command, final String name) {
-    return isCommand(command) && name != null && name.equals(command.getString(COMMAND, ""));
+    return isCommand(command) && name != null && name.equals(command.getString(COMMAND));
   }
 
   private static Stream<String> toStrings(final JsonArray array) {

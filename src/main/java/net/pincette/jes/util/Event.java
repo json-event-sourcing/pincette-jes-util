@@ -1,18 +1,32 @@
 package net.pincette.jes.util;
 
+import static java.util.regex.Pattern.compile;
+import static javax.json.Json.createObjectBuilder;
+import static javax.json.Json.createPatch;
 import static net.pincette.jes.util.JsonFields.BEFORE;
+import static net.pincette.jes.util.JsonFields.CORR;
 import static net.pincette.jes.util.JsonFields.ID;
+import static net.pincette.jes.util.JsonFields.JWT;
 import static net.pincette.jes.util.JsonFields.OPS;
 import static net.pincette.jes.util.JsonFields.SEQ;
+import static net.pincette.jes.util.JsonFields.TIMESTAMP;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.isManagedObject;
+import static net.pincette.json.JsonUtil.emptyObject;
 import static net.pincette.json.JsonUtil.getValue;
+import static net.pincette.json.JsonUtil.string;
+import static net.pincette.util.Builder.create;
 import static net.pincette.util.Pair.pair;
+import static net.pincette.util.Util.accumulate;
+import static net.pincette.util.Util.tryToGet;
 
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.regex.Pattern;
 import javax.json.JsonObject;
 import javax.json.JsonValue;
 import net.pincette.json.Patch;
+import net.pincette.util.Util.GeneralException;
 
 /**
  * Utilities to work with events.
@@ -21,7 +35,52 @@ import net.pincette.json.Patch;
  * @since 1.0
  */
 public class Event {
+  private static final Pattern SEQ_SUFFIX = compile("-\\d{6,}");
+
   private Event() {}
+
+  /**
+   * Applies an event to an aggregate instance, which results in the next version of the aggregate.
+   *
+   * @param aggregate the given aggregate instance.
+   * @param event the given event.
+   * @return The next version of the aggregate instance.
+   * @since 1.2
+   */
+  public static JsonObject applyEvent(final JsonObject aggregate, final JsonObject event) {
+    return tryToGet(
+            () ->
+                create(
+                        () ->
+                            createObjectBuilder(
+                                createPatch(event.getJsonArray(OPS))
+                                    .apply(aggregate)
+                                    .asJsonObject()))
+                    .update(b -> b.add(ID, stripSequenceNumber(event.getString(ID))))
+                    .update(b -> b.add(TYPE, event.getString(TYPE)))
+                    .update(b -> b.add(CORR, event.getString(CORR)))
+                    .update(b -> b.add(SEQ, event.getInt(SEQ)))
+                    .updateIf(
+                        () -> Optional.ofNullable(event.getJsonNumber(TIMESTAMP)),
+                        (b, t) -> b.add(TIMESTAMP, t))
+                    .updateIf(
+                        () -> Optional.ofNullable(event.getJsonObject(JWT)),
+                        (b, jwt) -> b.add(JWT, jwt))
+                    .build()
+                    .build(),
+            e -> {
+              throw new GeneralException("Event: " + string(event) + ": " + e.getMessage());
+            })
+        .orElse(null);
+  }
+
+  static Function<JsonObject, JsonObject> applyEvent() {
+    return applyEvent(null);
+  }
+
+  static Function<JsonObject, JsonObject> applyEvent(final JsonObject snapshot) {
+    return accumulate(Event::applyEvent, snapshot != null ? snapshot : emptyObject());
+  }
 
   /**
    * Returns <code>true</code> if the field at <code>jsonPointer</code> has changed. It examines the
@@ -67,9 +126,7 @@ public class Event {
   }
 
   private static boolean hasOps(final JsonObject event) {
-    return Optional.ofNullable(event.getJsonArray("_ops"))
-        .filter(ops -> !ops.isEmpty())
-        .isPresent();
+    return Optional.ofNullable(event.getJsonArray(OPS)).filter(ops -> !ops.isEmpty()).isPresent();
   }
 
   /**
@@ -119,5 +176,12 @@ public class Event {
         + ", while "
         + (aggregate.getInt(SEQ) + 1)
         + " was expected";
+  }
+
+  private static String stripSequenceNumber(final String id) {
+    return Optional.of(id.lastIndexOf('-'))
+        .filter(index -> index != -1 && SEQ_SUFFIX.matcher(id.substring(index)).matches())
+        .map(index -> id.substring(0, index))
+        .orElse(id);
   }
 }

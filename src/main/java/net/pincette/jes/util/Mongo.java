@@ -15,16 +15,12 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static javax.json.Json.createObjectBuilder;
-import static javax.json.Json.createPatch;
 import static net.pincette.jes.util.Command.isCommand;
+import static net.pincette.jes.util.Event.applyEvent;
 import static net.pincette.jes.util.Event.isEvent;
-import static net.pincette.jes.util.JsonFields.CORR;
 import static net.pincette.jes.util.JsonFields.DELETED;
 import static net.pincette.jes.util.JsonFields.ID;
-import static net.pincette.jes.util.JsonFields.JWT;
-import static net.pincette.jes.util.JsonFields.OPS;
 import static net.pincette.jes.util.JsonFields.SEQ;
-import static net.pincette.jes.util.JsonFields.TIMESTAMP;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.isManagedObject;
 import static net.pincette.json.JsonUtil.add;
@@ -38,7 +34,7 @@ import static net.pincette.mongo.Collection.insertOne;
 import static net.pincette.mongo.Collection.replaceOne;
 import static net.pincette.rs.Chain.with;
 import static net.pincette.rs.Reducer.reduce;
-import static net.pincette.util.Builder.create;
+import static net.pincette.rs.Util.subscribe;
 import static net.pincette.util.Collections.list;
 import static net.pincette.util.Pair.pair;
 import static net.pincette.util.StreamUtil.composeAsyncStream;
@@ -65,6 +61,7 @@ import net.pincette.json.Transform.JsonEntry;
 import net.pincette.json.Transform.Transformer;
 import net.pincette.mongo.BsonUtil;
 import net.pincette.mongo.Collection;
+import net.pincette.rs.Mapper;
 import org.bson.BsonDocument;
 import org.bson.Document;
 import org.bson.conversions.Bson;
@@ -218,21 +215,6 @@ public class Mongo {
         .orElseGet(net.pincette.rs.Util::empty);
   }
 
-  private static JsonObject applyEvent(final JsonObject json, final JsonObject event) {
-    return create(
-            () ->
-                createObjectBuilder(
-                    createPatch(event.getJsonArray(OPS)).apply(json).asJsonObject()))
-        .update(b -> b.add(ID, stripSequenceNumber(event.getString(ID))))
-        .update(b -> b.add(TYPE, event.getString(TYPE)))
-        .update(b -> b.add(CORR, event.getString(CORR)))
-        .update(b -> b.add(SEQ, event.getInt(SEQ)))
-        .update(b -> b.add(TIMESTAMP, event.getJsonNumber(TIMESTAMP)))
-        .updateIf(() -> Optional.ofNullable(event.getJsonObject(JWT)), (b, jwt) -> b.add(JWT, jwt))
-        .build()
-        .build();
-  }
-
   private static String collection(final JsonObject json, final String environment) {
     return json.getString(TYPE) + collectionInfix(json) + environment;
   }
@@ -249,6 +231,45 @@ public class Mongo {
 
   private static String eventCollection(final String type, final String environment) {
     return type + "-event-" + environment;
+  }
+
+  /**
+   * Returns the events of an aggregate instance in chronological order.
+   *
+   * @param id the identifier of the aggregate.
+   * @param type the aggregate type.
+   * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
+   * @param database the database which contains the event log.
+   * @return The aggregate instance events.
+   * @since 1.2
+   */
+  public static Publisher<JsonObject> events(
+      final String id, final String type, final String environment, final MongoDatabase database) {
+    return aggregationPublisher(
+        database.getCollection(eventCollection(type, environment)),
+        list(match(regex(ID, "^" + id + ".*")), sort(ascending(ID))));
+  }
+
+  /**
+   * Returns the events of an aggregate instance in chronological order, starting from the given
+   * snapshot.
+   *
+   * @param snapshot the snapshot of th aggregate instance to start from.
+   * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
+   * @param database the database which contains the event log.
+   * @return The aggregate instance events.
+   * @since 1.2
+   */
+  public static Publisher<JsonObject> events(
+      final JsonObject snapshot, final String environment, final MongoDatabase database) {
+    return aggregationPublisher(
+        database.getCollection(eventCollection(snapshot.getString(TYPE), environment)),
+        list(
+            match(
+                and(
+                    regex(ID, "^" + snapshot.getString(ID) + ".*"),
+                    gt(SEQ, snapshot.getInt(SEQ, -1)))),
+            sort(ascending(ID))));
   }
 
   private static CompletionStage<Map<Href, JsonObject>> fetchHrefs(
@@ -535,18 +556,14 @@ public class Mongo {
   public static CompletionStage<JsonObject> reconstruct(
       final String id, final String type, final String environment, final MongoDatabase database) {
     return reduce(
-        aggregationPublisher(
-            database.getCollection(eventCollection(type, environment)),
-            list(match(regex(ID, "^" + id + ".*")), sort(ascending(ID)))),
-        JsonUtil::emptyObject,
-        Mongo::applyEvent);
+        events(id, type, environment, database), JsonUtil::emptyObject, Event::applyEvent);
   }
 
   /**
    * Reconstructs the latest version of an aggregate using its event log, starting from the given
    * snapshot.
    *
-   * @param snapshot the snapshot of th aggregate instance to start from.
+   * @param snapshot the snapshot of the aggregate instance to start from.
    * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
    * @param database the database which contains the event log.
    * @return The reconstructed aggregate instance.
@@ -554,17 +571,32 @@ public class Mongo {
    */
   public static CompletionStage<JsonObject> reconstruct(
       final JsonObject snapshot, final String environment, final MongoDatabase database) {
-    return reduce(
-        aggregationPublisher(
-            database.getCollection(eventCollection(snapshot.getString(TYPE), environment)),
-            list(
-                match(
-                    and(
-                        regex(ID, "^" + snapshot.getString(ID) + ".*"),
-                        gt(SEQ, snapshot.getInt(SEQ, -1)))),
-                sort(ascending(ID)))),
-        () -> snapshot,
-        Mongo::applyEvent);
+    return reduce(events(snapshot, environment, database), () -> snapshot, Event::applyEvent);
+  }
+
+  /**
+   * Applies the published events one after the other and publishes the intermediate aggregate
+   * instances.
+   *
+   * @param events the event publisher.
+   * @return The aggregate instance publisher.
+   * @since 1.2
+   */
+  public static Publisher<JsonObject> reconstructionPublisher(final Publisher<JsonObject> events) {
+    return reconstructionPublisher(events, null);
+  }
+
+  /**
+   * Applies the published events one after the other and publishes the intermediate aggregate
+   * instances, starting from <code>snapshot</code>.
+   *
+   * @param events the event publisher.
+   * @return The aggregate instance publisher.
+   * @since 1.2
+   */
+  public static Publisher<JsonObject> reconstructionPublisher(
+      final Publisher<JsonObject> events, final JsonObject snapshot) {
+    return subscribe(events, new Mapper<>(applyEvent(snapshot)));
   }
 
   /**
@@ -668,13 +700,6 @@ public class Mongo {
             .thenApply(result -> must(result, r -> r))
             .thenApply(result -> json)
         : completedFuture(emptyObject());
-  }
-
-  private static String stripSequenceNumber(final String id) {
-    return Optional.of(id.lastIndexOf('-'))
-        .filter(index -> index != -1)
-        .map(index -> id.substring(0, index))
-        .orElse(id);
   }
 
   private static List<JsonObject> toJson(final List<BsonDocument> list) {

@@ -1,14 +1,22 @@
 package net.pincette.jes.util;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static net.pincette.jes.util.Event.applyEvent;
 import static net.pincette.jes.util.JsonFields.ID;
 import static net.pincette.jes.util.JsonFields.SEQ;
 import static net.pincette.jes.util.JsonFields.TYPE;
+import static net.pincette.json.JsonUtil.getNumber;
 import static net.pincette.json.JsonUtil.getString;
 import static net.pincette.json.Validate.hasErrors;
+import static net.pincette.json.filter.Util.stream;
 
 import java.util.Optional;
+import java.util.stream.Stream;
+import javax.json.JsonArray;
 import javax.json.JsonObject;
+import javax.json.JsonValue;
+import javax.json.stream.JsonParser;
+import net.pincette.json.JsonUtil;
 
 /**
  * Some general utilities.
@@ -60,7 +68,9 @@ public class Util {
    * @since 1.1.2
    */
   public static boolean isJesObject(final JsonObject json) {
-    return json != null && json.containsKey(ID) && json.containsKey(TYPE);
+    return json != null
+        && getString(json, "/" + ID).isPresent()
+        && getString(json, "/" + TYPE).isPresent();
   }
 
   /**
@@ -73,7 +83,7 @@ public class Util {
    * @since 1.0
    */
   public static boolean isManagedObject(final JsonObject json) {
-    return isJesObject(json) && json.containsKey(SEQ);
+    return isJesObject(json) && getNumber(json, "/" + SEQ).isPresent();
   }
 
   /**
@@ -90,7 +100,46 @@ public class Util {
     return isManagedObject(json)
         && type != null
         && id != null
-        && type.equals(json.getString(TYPE))
-        && id.equalsIgnoreCase(json.getString(ID));
+        && getString(json, "/" + TYPE).filter(t -> t.equals(type)).isPresent()
+        && getString(json, "/" + ID).filter(i -> i.equalsIgnoreCase(id)).isPresent();
+  }
+
+  /**
+   * Reconstructs aggregate instances using a sequence of events.
+   *
+   * @param events the array of events, which should start at <code>_seq</code> equal to 0 and which
+   *     should no holes in the numbering.
+   * @return The reconstructed aggregate instance stream. The events are applied one after the other
+   *     and each intermediate aggregate instance is emitted in the stream.
+   * @since 1.2
+   */
+  public static Stream<JsonObject> reconstruct(final JsonArray events) {
+    return reconstruct(events.stream());
+  }
+
+  /**
+   * Reconstructs aggregate instances using a sequence of events.
+   *
+   * @param events the event parser, which should start returning objects at <code>_seq</code> equal
+   *     to 0 and which should no holes in the numbering.
+   * @return The reconstructed aggregate instance stream. The events are applied one after the other
+   *     and each intermediate aggregate instance is emitted in the stream.
+   * @since 1.2
+   */
+  public static Stream<JsonObject> reconstruct(final JsonParser events) {
+    return reconstruct(stream(events));
+  }
+
+  /**
+   * Reconstructs aggregate instances using a sequence of events.
+   *
+   * @param events the stream of events, which should start at <code>_seq</code> equal to 0 and
+   *     which should no holes in the numbering.
+   * @return The reconstructed aggregate instance stream. The events are applied one after the other
+   *     and each intermediate aggregate instance is emitted in the stream.
+   * @since 1.2
+   */
+  public static Stream<JsonObject> reconstruct(final Stream<? extends JsonValue> events) {
+    return events.filter(JsonUtil::isObject).map(JsonValue::asJsonObject).map(applyEvent());
   }
 }
