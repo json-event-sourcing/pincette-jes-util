@@ -38,7 +38,7 @@ public class Href {
    *
    * @param app the given app name.
    * @param type the given aggregate type.
-   * @param id the given aggregate instance ID.
+   * @param id the given aggregate instance ID. It may be <code>null</code>.
    * @since 1.0
    */
   public Href(final String app, final String type, final String id) {

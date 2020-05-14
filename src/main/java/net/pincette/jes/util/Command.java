@@ -116,7 +116,7 @@ public class Command {
    * @since 1.0
    */
   public static boolean hasError(final JsonObject json) {
-    return json != null && json.getBoolean(ERROR, false);
+    return json != null && (json.getBoolean(ERROR, false) || !json.getBoolean("valid", true));
   }
 
   /**

@@ -1,0 +1,31 @@
+{
+  "title": "JSON Web Token",
+  "description": "The payload of a JSON Web Token",
+  "include": [
+    "resource:/validators/jes/macros.json"
+  ],
+  "conditions": [
+    {
+      "sub": "_string_",
+      "$comment": "The username",
+      "$code": "SUB"
+    },
+    {
+      "sub": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    },
+    {
+      "roles": [
+        {
+          "conditions": [
+            "_string_"
+          ]
+        }
+      ],
+      "$comment": "The roles the user has.",
+      "$code": "ROLES"
+    }
+  ]
+}

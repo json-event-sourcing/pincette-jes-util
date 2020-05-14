@@ -1,0 +1,14 @@
+{
+  "title": "JES aggregate fields",
+  "description": "The fields a JES aggregate should contain",
+  "include": [
+    "resource:/validators/jes/managed.json"
+  ],
+  "conditions": [
+    {
+      "_deleted": "_bool_",
+      "$comment": "This boolean marks the aggregate instance as deleted. This is a logical delete.",
+      "$code": "BOOL"
+    }
+  ]
+}

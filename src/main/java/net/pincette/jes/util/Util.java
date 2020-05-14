@@ -1,13 +1,13 @@
 package net.pincette.jes.util;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
+import static net.pincette.jes.util.Command.hasError;
 import static net.pincette.jes.util.Event.applyEvent;
 import static net.pincette.jes.util.JsonFields.ID;
 import static net.pincette.jes.util.JsonFields.SEQ;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.json.JsonUtil.getNumber;
 import static net.pincette.json.JsonUtil.getString;
-import static net.pincette.json.Validate.hasErrors;
 import static net.pincette.json.filter.Util.stream;
 
 import java.util.Optional;
@@ -42,9 +42,7 @@ public class Util {
             .apply(command, aggregate)
             .thenComposeAsync(
                 result ->
-                    hasErrors(result)
-                        ? completedFuture(result)
-                        : reducer.apply(command, aggregate));
+                    hasError(result) ? completedFuture(result) : reducer.apply(command, aggregate));
   }
 
   /**

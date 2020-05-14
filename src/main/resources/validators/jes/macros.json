@@ -1,0 +1,162 @@
+{
+  "title": "Common macros",
+  "macros": {
+    "bool": {
+      "$type": "bool"
+    },
+    "date": {
+      "$regex": "\\d{4}-\\d{2}-\\d{2}"
+    },
+    "decimal": {
+      "$type": "decimal"
+    },
+    "double": {
+      "$type": "double"
+    },
+    "email": {
+      "$regex": "^([a-zA-Z0-9_\\-\\.]+)@((\\[[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.)|(([a-zA-Z0-9\\-]+\\.)+))([a-zA-Z]{2,4}|[0-9]{1,3})(\\]?)$"
+    },
+    "int": {
+      "$type": "int"
+    },
+    "link": {
+      "conditions": [
+        {
+          "href": "_path_"
+        }
+      ]
+    },
+    "long": {
+      "$type": "long"
+    },
+    "patchOp": {
+      "$or": [
+        {
+          "$and": [
+            {
+              "op": "test"
+            },
+            {
+              "path": "_path_"
+            },
+            {
+              "value": "_scalar_"
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "op": "remove"
+            },
+            {
+              "path": "_path_"
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "op": "add"
+            },
+            {
+              "path": "_path_"
+            },
+            {
+              "value": "_scalar_"
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "op": "replace"
+            },
+            {
+              "path": "_path_"
+            },
+            {
+              "value": "_scalar_"
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "op": "move"
+            },
+            {
+              "path": "_path_"
+            },
+            {
+              "from": "_path_"
+            }
+          ]
+        },
+        {
+          "$and": [
+            {
+              "op": "copy"
+            },
+            {
+              "path": "_path_"
+            },
+            {
+              "from": "_path_"
+            }
+          ]
+        }
+      ]
+    },
+    "path": {
+      "$regex": "(/[^/]+)+"
+    },
+    "positive": {
+      "$gte": 0
+    },
+    "scalar": {
+      "$type": [
+        "bool",
+        "decimal",
+        "double",
+        "int",
+        "long",
+        "string",
+        "timestamp"
+      ]
+    },
+    "string": {
+      "$type": "string"
+    },
+    "timestamp": {
+      "$regex": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?"
+    },
+    "uuid": {
+      "$regex": "[0-9a-zA-Z]{8}-([0-9a-zA-Z]{4}-){3}[0-9a-zA-Z]{12}"
+    },
+    "_corr": {
+      "_corr": "_uuid_",
+      "$comment": "A correlation identifier. It is propagated throughout the flow.",
+      "$code": "CORR"
+    },
+    "_ops": {
+      "_ops": [
+        {
+          "conditions": [
+            "_patchOp_"
+          ]
+        }
+      ],
+      "$comment": "The _ops field should contain an array of RFC 6902 operations.",
+      "$code": "RFC6902",
+      "$location": "_ops"
+    },
+    "_timestamp": {
+      "_timestamp": {
+        "$gte": 0
+      },
+      "$comment": "The moment the object was created.",
+      "$code": "TIMESTAMP"
+    }
+  }
+}

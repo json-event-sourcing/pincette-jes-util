@@ -1,0 +1,49 @@
+{
+  "title": "JES event fields",
+  "description": "The fields a JES event should contain",
+  "include": [
+    "resource:/validators/jes/object.json"
+  ],
+  "conditions": [
+    "__corr_",
+    "__jwt_",
+    "__ops_",
+    "__timestamp_",
+    {
+      "_command": "_string_",
+      "$code": "STRING"
+    },
+    {
+      "_command": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    },
+    {
+      "_after": {
+        "ref": "resource:/validators/jes/aggregate.json"
+      },
+      "$comment": "An optional field that carries the new state of the aggregate instance.",
+      "$code": "AFTER"
+    },
+    {
+      "_before": {
+        "ref": "resource:/validators/jes/aggregate.json"
+      },
+      "$comment": "An optional field that carries the previous state of the aggregate instance.",
+      "$code": "BEFORE"
+    },
+    {
+      "_corr": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    },
+    {
+      "_jwt": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    }
+  ]
+}

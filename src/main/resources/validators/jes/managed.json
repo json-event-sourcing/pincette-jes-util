@@ -1,0 +1,33 @@
+{
+  "title": "JES managed object fields",
+  "description": "The fields a JES managed object should contain",
+  "include": [
+    "resource:/validators/jes/object.json"
+  ],
+  "conditions": [
+    "__corr_",
+    "__jwt_",
+    {
+      "_seq": "_positive_",
+      "$code": "POSITIVE"
+    },
+    {
+      "_corr": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    },
+    {
+      "_jwt": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    },
+    {
+      "_seq": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    }
+  ]
+}

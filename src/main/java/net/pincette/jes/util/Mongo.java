@@ -215,11 +215,11 @@ public class Mongo {
         .orElseGet(net.pincette.rs.Util::empty);
   }
 
-  private static String collection(final JsonObject json, final String environment) {
+  static String collection(final JsonObject json, final String environment) {
     return json.getString(TYPE) + collectionInfix(json) + environment;
   }
 
-  private static String collection(final Href href, final String environment) {
+  static String collection(final Href href, final String environment) {
     return href.type + "-" + environment;
   }
 

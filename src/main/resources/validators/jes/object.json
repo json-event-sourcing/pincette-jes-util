@@ -1,0 +1,40 @@
+{
+  "title": "The JSON Event Sourcing object",
+  "description": "It defines the fields that any JSON Event Sourcing object should have.",
+  "include": [
+    "resource:/validators/jes/macros.json"
+  ],
+  "macros": {
+    "_jwt": {
+      "_jwt": {
+        "ref": "resource:/validators/jes/jwt.json"
+      },
+      "$comment": "The payload of a JSON Web Token",
+      "$code": "JWT"
+    }
+  },
+  "conditions": [
+    {
+      "_id": "_uuid_",
+      "$comment": "The identifier of the aggregate instance.",
+      "$code": "ID"
+    },
+    {
+      "_id": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    },
+    {
+      "_type": "_string_",
+      "$comment": "The aggregate type, which is composed as <application>-<name>.",
+      "$code": "STRING"
+    },
+    {
+      "_type": {
+        "$exists": true
+      },
+      "$code": "REQUIRED"
+    }
+  ]
+}

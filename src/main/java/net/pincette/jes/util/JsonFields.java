@@ -3,6 +3,7 @@ package net.pincette.jes.util;
 /**
  * Standard fields for aggregates, events and commands. @@author Werner Donn\u00e9
  *
+ * @author Werner Donn\u00e9
  * @since 1.0
  */
 public class JsonFields {
@@ -77,6 +78,16 @@ public class JsonFields {
   public static final String ERROR = "_error";
 
   /**
+   * When a command has validation errors an array with this name is added to it. The objects in the
+   * array contain the fields <code>path</code>, which is a JSON pointer, and <code>code</code>,
+   * which is a technical code about the validation error. Clients can use this to display an error
+   * message.
+   *
+   * @since 1.3
+   */
+  public static final String ERRORS = "errors";
+
+  /**
    * The UUID of an aggregate instance.
    *
    * @since 1.0
@@ -107,22 +118,6 @@ public class JsonFields {
   public static final String LOCK = "_lock";
 
   /**
-   * The <code>roles</code> field in the JWT payload.
-   *
-   * @since 1.0
-   * @deprecated Use the <code>ROLES</code> field.
-   */
-  @Deprecated public static final String JWT_ROLES = "roles";
-
-  /**
-   * The mandatory <code>sub</code> field in the JWT payload.
-   *
-   * @since 1.0
-   * @deprecated Use the <code>SUB</code> field.
-   */
-  @Deprecated public static final String JWT_SUB = "sub";
-
-  /**
    * An array of language tags in the order of preference, which can be set on a command. When a
    * validator or some other component wishes to send messages to the user, it can use the proper
    * language for it.
@@ -144,7 +139,7 @@ public class JsonFields {
    *
    * @since 1.1.4
    */
-  public static final String ROLES = "_roles";
+  public static final String ROLES = "roles";
 
   /**
    * The <code>sub</code> field, which appears in the JWT payload, the lock object and the
@@ -161,6 +156,14 @@ public class JsonFields {
    * @since 1.0
    */
   public static final String SEQ = "_seq";
+
+  /**
+   * This is the field that is added to a command when reducing it. It represents the current state
+   * of the aggregate instance.
+   *
+   * @since 1.3
+   */
+  public static final String STATE = "_state";
 
   /**
    * An HTTP status code that may be set on rejected commands.*
