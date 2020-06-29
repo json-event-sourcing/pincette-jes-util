@@ -1,7 +1,10 @@
 package net.pincette.jes.util;
 
 import static java.lang.Runtime.getRuntime;
-import static net.pincette.util.Util.tryToGetWithRethrow;
+import static java.util.Arrays.stream;
+import static java.util.stream.Collectors.toList;
+import static net.pincette.util.Pair.pair;
+import static net.pincette.util.Util.tryToDoRethrow;
 import static org.apache.kafka.streams.KafkaStreams.State.ERROR;
 import static org.apache.kafka.streams.StreamsConfig.AT_LEAST_ONCE;
 import static org.apache.kafka.streams.StreamsConfig.DEFAULT_DESERIALIZATION_EXCEPTION_HANDLER_CLASS_CONFIG;
@@ -11,11 +14,14 @@ import static org.apache.kafka.streams.StreamsConfig.PROCESSING_GUARANTEE_CONFIG
 
 import com.typesafe.config.Config;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.BiFunction;
+import java.util.stream.Stream;
 import net.pincette.function.SideEffect;
+import net.pincette.util.Pair;
 import net.pincette.util.TimedCache;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.streams.KafkaStreams;
@@ -101,41 +107,61 @@ public class Streams {
    * @param topology the topology to run.
    * @param properties the Kafka properties to run it with. The keys should be strings and the
    *     values JSON strings. In the KStreams and KTables the type for the values is always <code>
-   *     javax.json.JsonObject</code>The processing guarantee will be set to exactly once.
+   *     javax.json.JsonObject</code>The processing guarantee will be set to at least once.
    * @return Indicates success of failure.
-   * @see <a
-   *     href="https://static.javadoc.io/javax.json/javax.json-api/1.1.4/javax/json/JsonObject.html">JsonObject</a>
+   * @see javax.json.JsonObject
    * @since 1.0
    */
   public static boolean start(final Topology topology, final Properties properties) {
-    final boolean[] error = new boolean[1];
-    final CountDownLatch latch = new CountDownLatch(1);
+    return start(Stream.of(pair(topology, properties)));
+  }
 
-    return tryToGetWithRethrow(
-            () -> new KafkaStreams(topology, streamsConfig(properties)),
-            streams -> {
-              streams.setStateListener(
-                  (newState, oldState) -> {
-                    if (newState.equals(ERROR)) {
-                      error[0] = true;
-                      latch.countDown();
-                    }
-                  });
+  /**
+   * This starts the <code>topologies</code> and waits for their completion. When the JVM is
+   * interrupted the streams are closed.
+   *
+   * @param topologies the topologies to run with the Kafka properties to run them with. The keys
+   *     should be strings and the values JSON strings. In the KStreams and KTables the type for the
+   *     values is always <code>
+   *     javax.json.JsonObject</code>The processing guarantee will be set to at least once.
+   * @return Indicates success of failure of any of the topologies.
+   * @see javax.json.JsonObject
+   * @since 1.3.1
+   */
+  public static boolean start(final Stream<Pair<Topology, Properties>> topologies) {
+    final List<Pair<Topology, Properties>> tpls = topologies.collect(toList());
+    final Boolean[] errors = new Boolean[tpls.size()];
+    final CountDownLatch latch = new CountDownLatch(tpls.size());
+    final KafkaStreams[] streams = new KafkaStreams[tpls.size()];
 
-              getRuntime()
-                  .addShutdownHook(
-                      new Thread(
-                          () -> {
-                            streams.close();
-                            latch.countDown();
-                          }));
+    for (int i = 0; i < tpls.size(); ++i) {
+      streams[i] = new KafkaStreams(tpls.get(i).first, streamsConfig(tpls.get(i).second));
+      streams[i].setStateListener(
+          (newState, oldState) -> {
+            if (newState.equals(ERROR)) {
+              errors[0] = true;
+              latch.countDown();
+            }
+          });
+    }
 
-              streams.start();
-              latch.await();
+    getRuntime()
+        .addShutdownHook(
+            new Thread(
+                () -> {
+                  for (int i = 0; i < streams.length; ++i) {
+                    streams[i].close();
+                    latch.countDown();
+                  }
+                }));
 
-              return !error[0];
-            })
-        .orElse(false);
+    for (int i = 0; i < streams.length; ++i) {
+      streams[i].start();
+    }
+
+    tryToDoRethrow(latch::await);
+
+    return stream(errors).noneMatch(error -> error);
   }
 
   /**

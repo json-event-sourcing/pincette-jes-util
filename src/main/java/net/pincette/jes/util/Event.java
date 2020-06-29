@@ -1,8 +1,6 @@
 package net.pincette.jes.util;
 
 import static java.util.regex.Pattern.compile;
-import static javax.json.Json.createObjectBuilder;
-import static javax.json.Json.createPatch;
 import static net.pincette.jes.util.JsonFields.BEFORE;
 import static net.pincette.jes.util.JsonFields.CORR;
 import static net.pincette.jes.util.JsonFields.ID;
@@ -12,6 +10,8 @@ import static net.pincette.jes.util.JsonFields.SEQ;
 import static net.pincette.jes.util.JsonFields.TIMESTAMP;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.isManagedObject;
+import static net.pincette.json.JsonUtil.createObjectBuilder;
+import static net.pincette.json.JsonUtil.createPatch;
 import static net.pincette.json.JsonUtil.emptyObject;
 import static net.pincette.json.JsonUtil.getValue;
 import static net.pincette.json.JsonUtil.string;

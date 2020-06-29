@@ -14,7 +14,6 @@ import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
-import static javax.json.Json.createObjectBuilder;
 import static net.pincette.jes.util.Command.isCommand;
 import static net.pincette.jes.util.Event.applyEvent;
 import static net.pincette.jes.util.Event.isEvent;
@@ -25,14 +24,10 @@ import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.isManagedObject;
 import static net.pincette.json.JsonUtil.add;
 import static net.pincette.json.JsonUtil.copy;
+import static net.pincette.json.JsonUtil.createObjectBuilder;
 import static net.pincette.json.JsonUtil.emptyObject;
 import static net.pincette.json.JsonUtil.isObject;
 import static net.pincette.json.Transform.transform;
-import static net.pincette.mongo.BsonUtil.fromJson;
-import static net.pincette.mongo.BsonUtil.toDocument;
-import static net.pincette.mongo.Collection.insertOne;
-import static net.pincette.mongo.Collection.replaceOne;
-import static net.pincette.rs.Chain.with;
 import static net.pincette.rs.Reducer.reduce;
 import static net.pincette.rs.Util.subscribe;
 import static net.pincette.util.Collections.list;
@@ -40,8 +35,6 @@ import static net.pincette.util.Pair.pair;
 import static net.pincette.util.StreamUtil.composeAsyncStream;
 import static net.pincette.util.Util.must;
 
-import com.mongodb.client.model.ReplaceOptions;
-import com.mongodb.client.result.UpdateResult;
 import com.mongodb.reactivestreams.client.AggregatePublisher;
 import com.mongodb.reactivestreams.client.ClientSession;
 import com.mongodb.reactivestreams.client.FindPublisher;
@@ -59,8 +52,7 @@ import javax.json.JsonObject;
 import net.pincette.json.JsonUtil;
 import net.pincette.json.Transform.JsonEntry;
 import net.pincette.json.Transform.Transformer;
-import net.pincette.mongo.BsonUtil;
-import net.pincette.mongo.Collection;
+import net.pincette.mongo.JsonClient;
 import net.pincette.rs.Mapper;
 import org.bson.BsonDocument;
 import org.bson.Document;
@@ -99,10 +91,12 @@ public class Mongo {
    * @param pipeline the given pipeline.
    * @return The list of objects.
    * @since 1.0.4
+   * @deprecated Use {@link JsonClient#aggregate(MongoCollection, List)}.
    */
+  @Deprecated
   public static CompletionStage<List<JsonObject>> aggregate(
       final MongoCollection<Document> collection, final List<? extends Bson> pipeline) {
-    return aggregate(collection, pipeline, null);
+    return JsonClient.aggregate(collection, pipeline);
   }
 
   /**
@@ -113,12 +107,14 @@ public class Mongo {
    * @param pipeline the given pipeline.
    * @return The list of objects.
    * @since 1.1.2
+   * @deprecated User {@link JsonClient#aggregate(MongoCollection, ClientSession, List)}.
    */
+  @Deprecated
   public static CompletionStage<List<JsonObject>> aggregate(
       final MongoCollection<Document> collection,
       final ClientSession session,
       final List<? extends Bson> pipeline) {
-    return aggregate(collection, session, pipeline, null);
+    return JsonClient.aggregate(collection, session, pipeline);
   }
 
   /**
@@ -129,13 +125,14 @@ public class Mongo {
    * @param setParameters a function to set the parameters for the result set.
    * @return The list of objects.
    * @since 1.0.4
+   * @deprecated Use {@link JsonClient#aggregate(MongoCollection, List, UnaryOperator)}.
    */
+  @Deprecated
   public static CompletionStage<List<JsonObject>> aggregate(
       final MongoCollection<Document> collection,
       final List<? extends Bson> pipeline,
       final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return Collection.aggregate(collection, pipeline, BsonDocument.class, setParameters)
-        .thenApply(Mongo::toJson);
+    return JsonClient.aggregate(collection, pipeline, setParameters);
   }
 
   /**
@@ -147,14 +144,16 @@ public class Mongo {
    * @param setParameters a function to set the parameters for the result set.
    * @return The list of objects.
    * @since 1.1.2
+   * @deprecated Use {@link JsonClient#aggregate(MongoCollection, ClientSession, List,
+   *     UnaryOperator)}.
    */
+  @Deprecated
   public static CompletionStage<List<JsonObject>> aggregate(
       final MongoCollection<Document> collection,
       final ClientSession session,
       final List<? extends Bson> pipeline,
       final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return Collection.aggregate(collection, session, pipeline, BsonDocument.class, setParameters)
-        .thenApply(Mongo::toJson);
+    return JsonClient.aggregate(collection, session, pipeline, setParameters);
   }
 
   /**
@@ -164,10 +163,12 @@ public class Mongo {
    * @param pipeline the given pipeline.
    * @return The object publisher.
    * @since 1.1
+   * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, List)}.
    */
+  @Deprecated
   public static Publisher<JsonObject> aggregationPublisher(
       final MongoCollection<Document> collection, final List<? extends Bson> pipeline) {
-    return aggregationPublisher(collection, pipeline, null);
+    return JsonClient.aggregationPublisher(collection, pipeline);
   }
 
   /**
@@ -178,13 +179,14 @@ public class Mongo {
    * @param setParameters a function to set the parameters for the result set.
    * @return The object publisher.
    * @since 1.1
+   * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, List, UnaryOperator)}.
    */
+  @Deprecated
   public static Publisher<JsonObject> aggregationPublisher(
       final MongoCollection<Document> collection,
       final List<? extends Bson> pipeline,
       final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return aggregationPublisher(
-        () -> collection.aggregate(pipeline, BsonDocument.class), setParameters);
+    return JsonClient.aggregationPublisher(collection, pipeline, setParameters);
   }
 
   /**
@@ -196,41 +198,34 @@ public class Mongo {
    * @param setParameters a function to set the parameters for the result set.
    * @return The object publisher.
    * @since 1.1.2
+   * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, ClientSession, List,
+   *     UnaryOperator)}.
    */
+  @Deprecated
   public static Publisher<JsonObject> aggregationPublisher(
       final MongoCollection<Document> collection,
       final ClientSession session,
       final List<? extends Bson> pipeline,
       final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return aggregationPublisher(
-        () -> collection.aggregate(session, pipeline, BsonDocument.class), setParameters);
-  }
-
-  private static Publisher<JsonObject> aggregationPublisher(
-      final Supplier<AggregatePublisher<BsonDocument>> operation,
-      final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return Optional.of(operation.get())
-        .map(a -> setParameters != null ? setParameters.apply(a) : a)
-        .map(Mongo::toJson)
-        .orElseGet(net.pincette.rs.Util::empty);
+    return JsonClient.aggregationPublisher(collection, session, pipeline, setParameters);
   }
 
   static String collection(final JsonObject json, final String environment) {
-    return json.getString(TYPE) + collectionInfix(json) + environment;
+    return json.getString(TYPE) + collectionInfix(json) + suffix(environment);
   }
 
   static String collection(final Href href, final String environment) {
-    return href.type + "-" + environment;
+    return href.type + suffix(environment);
   }
 
   private static String collectionInfix(final JsonObject json) {
-    final Supplier<String> tryCommand = () -> isCommand(json) ? "-command-" : "-";
+    final Supplier<String> tryCommand = () -> isCommand(json) ? "-command" : "";
 
-    return isEvent(json) ? "-event-" : tryCommand.get();
+    return isEvent(json) ? "-event" : tryCommand.get();
   }
 
   private static String eventCollection(final String type, final String environment) {
-    return type + "-event-" + environment;
+    return type + "-event" + suffix(environment);
   }
 
   /**
@@ -245,7 +240,7 @@ public class Mongo {
    */
   public static Publisher<JsonObject> events(
       final String id, final String type, final String environment, final MongoDatabase database) {
-    return aggregationPublisher(
+    return JsonClient.aggregationPublisher(
         database.getCollection(eventCollection(type, environment)),
         list(match(regex(ID, "^" + id + ".*")), sort(ascending(ID))));
   }
@@ -262,7 +257,7 @@ public class Mongo {
    */
   public static Publisher<JsonObject> events(
       final JsonObject snapshot, final String environment, final MongoDatabase database) {
-    return aggregationPublisher(
+    return JsonClient.aggregationPublisher(
         database.getCollection(eventCollection(snapshot.getString(TYPE), environment)),
         list(
             match(
@@ -294,10 +289,12 @@ public class Mongo {
    * @param filter the given filter.
    * @return The list of objects.
    * @since 1.0.2
+   * @deprecated Use {@link JsonClient#find(MongoCollection, Bson)}.
    */
+  @Deprecated
   public static CompletionStage<List<JsonObject>> find(
       final MongoCollection<Document> collection, final Bson filter) {
-    return find(collection, filter, null);
+    return JsonClient.find(collection, filter);
   }
 
   /**
@@ -308,10 +305,12 @@ public class Mongo {
    * @param filter the given filter.
    * @return The list of objects.
    * @since 1.1.2
+   * @deprecated Use {@link JsonClient#find(MongoCollection, ClientSession, Bson)}.
    */
+  @Deprecated
   public static CompletionStage<List<JsonObject>> find(
       final MongoCollection<Document> collection, final ClientSession session, final Bson filter) {
-    return find(collection, session, filter, null);
+    return JsonClient.find(collection, session, filter);
   }
 
   /**
@@ -322,13 +321,14 @@ public class Mongo {
    * @param setParameters a function to set the parameters for the result set.
    * @return The list of objects.
    * @since 1.0.2
+   * @deprecated Use {@link JsonClient#find(MongoCollection, Bson, UnaryOperator)}.
    */
+  @Deprecated
   public static CompletionStage<List<JsonObject>> find(
       final MongoCollection<Document> collection,
       final Bson filter,
       final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return Collection.find(collection, filter, BsonDocument.class, setParameters)
-        .thenApply(Mongo::toJson);
+    return JsonClient.find(collection, filter, setParameters);
   }
 
   /**
@@ -340,14 +340,15 @@ public class Mongo {
    * @param setParameters a function to set the parameters for the result set.
    * @return The list of objects.
    * @since 1.0.2
+   * @deprecated User {@link JsonClient#find(MongoCollection, ClientSession, Bson, UnaryOperator)}.
    */
+  @Deprecated
   public static CompletionStage<List<JsonObject>> find(
       final MongoCollection<Document> collection,
       final ClientSession session,
       final Bson filter,
       final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return Collection.find(collection, session, filter, BsonDocument.class, setParameters)
-        .thenApply(Mongo::toJson);
+    return JsonClient.find(collection, session, filter, setParameters);
   }
 
   /**
@@ -362,7 +363,8 @@ public class Mongo {
    */
   public static CompletionStage<Optional<JsonObject>> findHref(
       final Href href, final String environment, final MongoDatabase database) {
-    return findOne(database.getCollection(collection(href, environment)), eq(ID, href.id));
+    return JsonClient.findOne(
+        database.getCollection(collection(href, environment)), eq(ID, href.id));
   }
 
   /**
@@ -372,10 +374,12 @@ public class Mongo {
    * @param filter the given filter.
    * @return The object publisher.
    * @since 1.1
+   * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, Bson)}.
    */
+  @Deprecated
   public static Publisher<JsonObject> findPublisher(
       final MongoCollection<Document> collection, final Bson filter) {
-    return findPublisher(collection, filter, null);
+    return JsonClient.findPublisher(collection, filter);
   }
 
   /**
@@ -386,12 +390,14 @@ public class Mongo {
    * @param setParameters a function to set the parameters for the result set.
    * @return The object publisher.
    * @since 1.1
+   * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, Bson, UnaryOperator)}.
    */
+  @Deprecated
   public static Publisher<JsonObject> findPublisher(
       final MongoCollection<Document> collection,
       final Bson filter,
       final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return findPublisher(() -> collection.find(filter, BsonDocument.class), setParameters);
+    return JsonClient.findPublisher(collection, filter, setParameters);
   }
 
   /**
@@ -403,22 +409,16 @@ public class Mongo {
    * @param setParameters a function to set the parameters for the result set.
    * @return The object publisher.
    * @since 1.1.2
+   * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, ClientSession, Bson,
+   *     UnaryOperator)}.
    */
+  @Deprecated
   public static Publisher<JsonObject> findPublisher(
       final MongoCollection<Document> collection,
       final ClientSession session,
       final Bson filter,
       final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return findPublisher(() -> collection.find(session, filter, BsonDocument.class), setParameters);
-  }
-
-  private static Publisher<JsonObject> findPublisher(
-      final Supplier<FindPublisher<BsonDocument>> operation,
-      final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return Optional.of(operation.get())
-        .map(a -> setParameters != null ? setParameters.apply(a) : a)
-        .map(Mongo::toJson)
-        .orElseGet(net.pincette.rs.Util::empty);
+    return JsonClient.findPublisher(collection, session, filter, setParameters);
   }
 
   /**
@@ -429,11 +429,12 @@ public class Mongo {
    * @param filter the given filter.
    * @return The optional result.
    * @since 1.0.2
+   * @deprecated Use {@link JsonClient#findOne(MongoCollection, Bson)}.
    */
+  @Deprecated
   public static CompletionStage<Optional<JsonObject>> findOne(
       final MongoCollection<Document> collection, final Bson filter) {
-    return Collection.findOne(collection, filter, BsonDocument.class, null)
-        .thenApply(result -> result.map(BsonUtil::fromBson));
+    return JsonClient.findOne(collection, filter);
   }
 
   /**
@@ -445,11 +446,12 @@ public class Mongo {
    * @param filter the given filter.
    * @return The optional result.
    * @since 1.1.2
+   * @deprecated Use {@link JsonClient#findOne(MongoCollection, ClientSession, Bson)}.
    */
+  @Deprecated
   public static CompletionStage<Optional<JsonObject>> findOne(
       final MongoCollection<Document> collection, final ClientSession session, final Bson filter) {
-    return Collection.findOne(collection, session, filter, BsonDocument.class, null)
-        .thenApply(result -> result.map(BsonUtil::fromBson));
+    return JsonClient.findOne(collection, session, filter);
   }
 
   private static boolean hrefOnly(final JsonObject json) {
@@ -475,7 +477,7 @@ public class Mongo {
    */
   public static CompletionStage<Boolean> insert(
       final JsonObject json, final String collection, final MongoDatabase database) {
-    return insert(json, collection, database, null);
+    return JsonClient.insert(database.getCollection(collection), json);
   }
 
   /**
@@ -494,13 +496,7 @@ public class Mongo {
       final String collection,
       final MongoDatabase database,
       final ClientSession session) {
-    final Document document = toDocument(fromJson(json));
-    final MongoCollection<Document> mongoCollection = database.getCollection(collection);
-
-    return (session != null
-            ? insertOne(mongoCollection, session, document)
-            : insertOne(mongoCollection, document))
-        .thenApply(success -> true);
+    return JsonClient.insert(database.getCollection(collection), json, session);
   }
 
   /**
@@ -518,7 +514,7 @@ public class Mongo {
    */
   public static CompletionStage<Boolean> insertJson(
       final JsonObject json, final String environment, final MongoDatabase database) {
-    return insert(json, environment, database, null);
+    return insertJson(json, environment, database, null);
   }
 
   /**
@@ -540,7 +536,7 @@ public class Mongo {
       final String environment,
       final MongoDatabase database,
       final ClientSession session) {
-    return insert(json, collection(json, environment), database, session);
+    return JsonClient.insert(database.getCollection(collection(json, environment)), json, session);
   }
 
   /**
@@ -702,12 +698,8 @@ public class Mongo {
         : completedFuture(emptyObject());
   }
 
-  private static List<JsonObject> toJson(final List<BsonDocument> list) {
-    return list.stream().map(BsonUtil::fromBson).collect(toList());
-  }
-
-  private static Publisher<JsonObject> toJson(final Publisher<BsonDocument> pub) {
-    return with(pub).map(BsonUtil::fromBson).get();
+  private static String suffix(final String environment) {
+    return environment != null ? ("-" + environment) : "";
   }
 
   /**
@@ -748,7 +740,8 @@ public class Mongo {
       final String environment,
       final MongoDatabase database,
       final ClientSession session) {
-    return update(json, json.getString(ID), collection(json, environment), database, session);
+    return JsonClient.update(
+        database.getCollection(collection(json, environment)), json, json.getString(ID), session);
   }
 
   /**
@@ -768,7 +761,7 @@ public class Mongo {
       final String id,
       final String collection,
       final MongoDatabase database) {
-    return update(json, id, collection, database, null);
+    return JsonClient.update(database.getCollection(collection), json, id);
   }
 
   /**
@@ -790,15 +783,7 @@ public class Mongo {
       final String collection,
       final MongoDatabase database,
       final ClientSession session) {
-    final Document document = toDocument(fromJson(json));
-    final Bson filter = eq(ID, id);
-    final MongoCollection<Document> mongoCollection = database.getCollection(collection);
-    final ReplaceOptions options = new ReplaceOptions().upsert(true);
-
-    return (session != null
-            ? replaceOne(mongoCollection, session, filter, document, options)
-            : replaceOne(mongoCollection, filter, document, options))
-        .thenApply(UpdateResult::wasAcknowledged);
+    return JsonClient.update(database.getCollection(collection), json, id, session);
   }
 
   /**

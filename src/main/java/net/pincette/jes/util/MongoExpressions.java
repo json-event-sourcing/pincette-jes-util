@@ -1,10 +1,14 @@
 package net.pincette.jes.util;
 
-import static javax.json.Json.createArrayBuilder;
-import static javax.json.Json.createValue;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.UUID.nameUUIDFromBytes;
+import static java.util.UUID.randomUUID;
 import static javax.json.JsonValue.NULL;
 import static net.pincette.jes.util.Mongo.collection;
+import static net.pincette.json.JsonUtil.asLong;
 import static net.pincette.json.JsonUtil.asString;
+import static net.pincette.json.JsonUtil.createArrayBuilder;
+import static net.pincette.json.JsonUtil.createValue;
 import static net.pincette.mongo.BsonUtil.fromJson;
 import static net.pincette.mongo.Expression.memberFunction;
 import static net.pincette.mongo.Expression.registerExtension;
@@ -21,6 +25,7 @@ import javax.json.JsonObject;
 import javax.json.JsonValue;
 import net.pincette.json.JsonUtil;
 import net.pincette.mongo.Implementation;
+import net.pincette.mongo.JsonClient;
 import net.pincette.mongo.Operator;
 import org.bson.Document;
 import org.bson.conversions.Bson;
@@ -37,8 +42,12 @@ public class MongoExpressions {
   private static final String FIND_OP = "$jes-find";
   private static final String HREF_OP = "$jes-href";
   private static final String ID_FIELD = "id";
+  private static final String KEY = "key";
+  private static final String NAME_UUID = "$jes-name-uuid";
   private static final String QUERY_FIELD = "query";
+  private static final String SCOPE = "scope";
   private static final String TYPE_FIELD = "type";
+  private static final String UUID = "$jes-uuid";
 
   private MongoExpressions() {}
 
@@ -60,7 +69,7 @@ public class MongoExpressions {
 
   private static CompletionStage<JsonValue> findArray(
       final MongoCollection<Document> collection, final Bson filter) {
-    return Mongo.find(collection, filter)
+    return JsonClient.find(collection, filter)
         .thenApply(
             r ->
                 r.stream()
@@ -70,13 +79,14 @@ public class MongoExpressions {
 
   private static CompletionStage<JsonValue> findObject(
       final MongoCollection<Document> collection, final Bson filter) {
-    return Mongo.findOne(collection, filter).thenApply(r -> r.map(j -> (JsonValue) j).orElse(NULL));
+    return JsonClient.findOne(collection, filter)
+        .thenApply(r -> r.map(j -> (JsonValue) j).orElse(NULL));
   }
 
   /**
    * This extension is called <code>$jes-findOne</code>. Its expression is an object with the fields
    * <code>app</code>, <code>type</code> and <code>query</code>. All are mandatory. The
-   * subexpressions <code>app</code> and <code>type</code>should generate a string. The <code>query
+   * subexpressions <code>app</code> and <code>type</code> should generate a string. The <code>query
    * </code> subexpression should be an object that represents a valid MongoDB query operator. The
    * calculated value is a JSON object or <code>NULL</code> if it doesn't exist.
    *
@@ -154,6 +164,8 @@ public class MongoExpressions {
     registerExtension(FIND_ONE_OP, findOne(database, environment));
     registerExtension(FIND_OP, find(database, environment));
     registerExtension(HREF_OP, MongoExpressions::href);
+    registerExtension(NAME_UUID, MongoExpressions::nameUUID);
+    registerExtension(UUID, MongoExpressions::uuid);
   }
 
   private static String string(
@@ -163,5 +175,43 @@ public class MongoExpressions {
     return implementation != null
         ? asString(implementation.apply(json, variables)).getString()
         : null;
+  }
+
+  /**
+   * This extension is called <code>$jes-name-uuid</code>. Its expression is an object with the
+   * mandatory fields <code>scope</code> and <code>key</code>. The expression of the former should
+   * yield a string and that of the latter an integer.
+   *
+   * @param expression the given expression.
+   * @return The implementation.
+   * @since 1.3.1
+   */
+  public static Implementation nameUUID(final JsonValue expression) {
+    final Implementation scope = memberFunction(expression, SCOPE);
+    final Implementation key = memberFunction(expression, KEY);
+
+    return (json, vars) ->
+        scope != null && key != null
+            ? createValue(
+                nameUUIDFromBytes(
+                        (asString(scope.apply(json, vars)).getString()
+                                + "#"
+                                + asLong(key.apply(json, vars)))
+                            .getBytes(UTF_8))
+                    .toString()
+                    .toLowerCase())
+            : NULL;
+  }
+
+  /**
+   * This extension is called <code>$jes-uuid</code>. Its expression is not evaluated. The operator
+   * produces a UUID.
+   *
+   * @param expression the given expression.
+   * @return The implementation.
+   * @since 1.3.1
+   */
+  public static Implementation uuid(final JsonValue expression) {
+    return (json, vars) -> createValue(randomUUID().toString().toLowerCase());
   }
 }

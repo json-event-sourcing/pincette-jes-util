@@ -1,10 +1,10 @@
 package net.pincette.jes.util;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
-import static javax.json.Json.createObjectBuilder;
 import static net.pincette.jes.util.JsonFields.ERROR;
 import static net.pincette.jes.util.JsonFields.ERRORS;
 import static net.pincette.jes.util.JsonFields.STATE;
+import static net.pincette.json.JsonUtil.createObjectBuilder;
 
 import java.util.Optional;
 import java.util.function.Function;
