@@ -11,7 +11,8 @@ import static net.pincette.json.JsonUtil.createArrayBuilder;
 import static net.pincette.json.JsonUtil.createValue;
 import static net.pincette.mongo.BsonUtil.fromJson;
 import static net.pincette.mongo.Expression.memberFunction;
-import static net.pincette.mongo.Expression.registerExtension;
+import static net.pincette.util.Collections.map;
+import static net.pincette.util.Pair.pair;
 import static net.pincette.util.Util.tryToGetRethrow;
 
 import com.mongodb.reactivestreams.client.MongoCollection;
@@ -22,8 +23,10 @@ import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonObject;
+import javax.json.JsonString;
 import javax.json.JsonValue;
 import net.pincette.json.JsonUtil;
+import net.pincette.mongo.Features;
 import net.pincette.mongo.Implementation;
 import net.pincette.mongo.JsonClient;
 import net.pincette.mongo.Operator;
@@ -38,18 +41,57 @@ import org.bson.conversions.Bson;
  */
 public class MongoExpressions {
   private static final String APP_FIELD = "app";
+  private static final String CHANGED = "$jes-changed";
   private static final String FIND_ONE_OP = "$jes-findOne";
   private static final String FIND_OP = "$jes-find";
+  private static final String FROM = "from";
   private static final String HREF_OP = "$jes-href";
   private static final String ID_FIELD = "id";
   private static final String KEY = "key";
   private static final String NAME_UUID = "$jes-name-uuid";
+  private static final String POINTER = "pointer";
   private static final String QUERY_FIELD = "query";
   private static final String SCOPE = "scope";
+  private static final String TO = "to";
   private static final String TYPE_FIELD = "type";
   private static final String UUID = "$jes-uuid";
 
   private MongoExpressions() {}
+
+  /**
+   * This extension is called <code>$jes-changed</code>. Its expression is an object with the fields
+   * <code>pointer</code>, <code>from</code> and <code>to</code>. Only the first field is mandatory.
+   * It should be an expression that yields a JSON pointer. The operator returns <code>true</code>
+   * if the pointed field has changed in the event. If both the <code>from</code> and <code>to
+   * </code> fields are present then the operator returns <code>true</code> when the pointed field
+   * in the event has transitioned between the two values produced by their expressions.
+   *
+   * @param expression the given expression.
+   * @return The implementation.
+   * @since 1.3.2
+   */
+  public static Implementation changed(final JsonValue expression, final Features features) {
+    final Implementation from = memberFunction(expression, FROM, features);
+    final Implementation pointer = memberFunction(expression, POINTER, features);
+    final Implementation to = memberFunction(expression, TO, features);
+
+    return (json, vars) ->
+        pointer != null
+            ? Optional.of(pointer.apply(json, vars))
+                .filter(JsonUtil::isString)
+                .map(JsonUtil::asString)
+                .map(JsonString::getString)
+                .map(
+                    p ->
+                        createValue(
+                            (from != null
+                                    && to != null
+                                    && Event.changed(
+                                        json, p, from.apply(json, vars), to.apply(json, vars)))
+                                || ((from == null || to == null) && Event.changed(json, p))))
+                .orElse(NULL)
+            : NULL;
+  }
 
   /**
    * This extension is called <code>$jes-find</code>. Its expression is an object with the fields
@@ -64,7 +106,8 @@ public class MongoExpressions {
    * @since 1.3
    */
   public static Operator find(final MongoDatabase database, final String environment) {
-    return expression -> finder(expression, database, environment, MongoExpressions::findArray);
+    return (expression, features) ->
+        finder(expression, database, environment, MongoExpressions::findArray, features);
   }
 
   private static CompletionStage<JsonValue> findArray(
@@ -96,17 +139,19 @@ public class MongoExpressions {
    * @since 1.3
    */
   public static Operator findOne(final MongoDatabase database, final String environment) {
-    return expression -> finder(expression, database, environment, MongoExpressions::findObject);
+    return (expression, features) ->
+        finder(expression, database, environment, MongoExpressions::findObject, features);
   }
 
   private static Implementation finder(
       final JsonValue expression,
       final MongoDatabase database,
       final String environment,
-      final BiFunction<MongoCollection<Document>, Bson, CompletionStage<JsonValue>> op) {
-    final Implementation app = memberFunction(expression, APP_FIELD);
-    final Implementation query = memberFunction(expression, QUERY_FIELD);
-    final Implementation type = memberFunction(expression, TYPE_FIELD);
+      final BiFunction<MongoCollection<Document>, Bson, CompletionStage<JsonValue>> op,
+      final Features features) {
+    final Implementation app = memberFunction(expression, APP_FIELD, features);
+    final Implementation query = memberFunction(expression, QUERY_FIELD, features);
+    final Implementation type = memberFunction(expression, TYPE_FIELD, features);
 
     return (json, vars) ->
         app != null && query != null && type != null
@@ -140,10 +185,10 @@ public class MongoExpressions {
    * @return The implementation.
    * @since 1.3
    */
-  public static Implementation href(final JsonValue expression) {
-    final Implementation app = memberFunction(expression, APP_FIELD);
-    final Implementation id = memberFunction(expression, ID_FIELD);
-    final Implementation type = memberFunction(expression, TYPE_FIELD);
+  public static Implementation href(final JsonValue expression, final Features features) {
+    final Implementation app = memberFunction(expression, APP_FIELD, features);
+    final Implementation id = memberFunction(expression, ID_FIELD, features);
+    final Implementation type = memberFunction(expression, TYPE_FIELD, features);
 
     return (json, vars) ->
         app != null && type != null
@@ -154,18 +199,22 @@ public class MongoExpressions {
   }
 
   /**
-   * This globally registers all the extensions of this class. It should be called only once.
+   * Returns the JES extension operators for the MongoDB aggregation expression language.
    *
    * @param database the MongoDB database.
    * @param environment the environment.
-   * @since 1.3
+   * @return The operator map.
+   * @since 1.3.2
    */
-  public static void register(final MongoDatabase database, final String environment) {
-    registerExtension(FIND_ONE_OP, findOne(database, environment));
-    registerExtension(FIND_OP, find(database, environment));
-    registerExtension(HREF_OP, MongoExpressions::href);
-    registerExtension(NAME_UUID, MongoExpressions::nameUUID);
-    registerExtension(UUID, MongoExpressions::uuid);
+  public static Map<String, Operator> operators(
+      final MongoDatabase database, final String environment) {
+    return map(
+        pair(CHANGED, MongoExpressions::changed),
+        pair(FIND_ONE_OP, findOne(database, environment)),
+        pair(FIND_OP, find(database, environment)),
+        pair(HREF_OP, MongoExpressions::href),
+        pair(NAME_UUID, MongoExpressions::nameUUID),
+        pair(UUID, (e, f) -> uuid()));
   }
 
   private static String string(
@@ -186,9 +235,9 @@ public class MongoExpressions {
    * @return The implementation.
    * @since 1.3.1
    */
-  public static Implementation nameUUID(final JsonValue expression) {
-    final Implementation scope = memberFunction(expression, SCOPE);
-    final Implementation key = memberFunction(expression, KEY);
+  public static Implementation nameUUID(final JsonValue expression, final Features features) {
+    final Implementation scope = memberFunction(expression, SCOPE, features);
+    final Implementation key = memberFunction(expression, KEY, features);
 
     return (json, vars) ->
         scope != null && key != null
@@ -204,14 +253,12 @@ public class MongoExpressions {
   }
 
   /**
-   * This extension is called <code>$jes-uuid</code>. Its expression is not evaluated. The operator
-   * produces a UUID.
+   * This extension is called <code>$jes-uuid</code>. The operator produces a UUID.
    *
-   * @param expression the given expression.
    * @return The implementation.
    * @since 1.3.1
    */
-  public static Implementation uuid(final JsonValue expression) {
+  public static Implementation uuid() {
     return (json, vars) -> createValue(randomUUID().toString().toLowerCase());
   }
 }

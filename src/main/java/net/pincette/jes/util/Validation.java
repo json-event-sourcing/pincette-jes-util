@@ -23,13 +23,25 @@ public class Validation {
    * state of the aggregate instance.
    *
    * @param source the source of the validation specification.
-   * @return The generated validator.
+   * @return The generated validation reducer.
    * @since 1.3
    * @see Validator
    */
   public static Reducer validator(final String source, final Validator validators) {
-    final Function<JsonObject, JsonArray> validator = validators.validator(source);
+    return validator(validators.validator(source));
+  }
 
+  /**
+   * The validator can expect the <code>_state</code> field to be added to the command. This way
+   * validation expressions can be written that take into account the current state of the aggregate
+   * instance.
+   *
+   * @param validator the validator.
+   * @return The generated validation reducer.
+   * @since 1.3.2
+   * @see Validator
+   */
+  public static Reducer validator(final Function<JsonObject, JsonArray> validator) {
     return (command, state) ->
         completedFuture(
             Optional.of(validator.apply(createObjectBuilder(command).add(STATE, state).build()))
