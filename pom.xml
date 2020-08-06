@@ -7,7 +7,7 @@
   <groupId>net.pincette</groupId>
   <artifactId>pincette-jes-util</artifactId>
   <packaging>jar</packaging>
-  <version>1.3.3</version>
+  <version>1.3.4</version>
   <name>pincette-jes-util</name>
   <description>Utilities to work with pincette-jes</description>
   <url>https://github.com/json-event-sourcing/pincette-jes-util</url>
@@ -82,7 +82,7 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-json</artifactId>
-      <version>1.3.5</version>
+      <version>1.3.6</version>
     </dependency>
     <dependency>
       <groupId>com.typesafe</groupId>

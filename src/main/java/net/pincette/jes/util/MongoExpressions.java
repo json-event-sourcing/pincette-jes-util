@@ -9,7 +9,8 @@ import static net.pincette.json.JsonUtil.asLong;
 import static net.pincette.json.JsonUtil.asString;
 import static net.pincette.json.JsonUtil.createArrayBuilder;
 import static net.pincette.json.JsonUtil.createValue;
-import static net.pincette.mongo.BsonUtil.fromJson;
+import static net.pincette.json.JsonUtil.isArray;
+import static net.pincette.json.JsonUtil.isObject;
 import static net.pincette.mongo.Expression.memberFunction;
 import static net.pincette.util.Collections.map;
 import static net.pincette.util.Pair.pair;
@@ -17,13 +18,16 @@ import static net.pincette.util.Util.tryToGetRethrow;
 
 import com.mongodb.reactivestreams.client.MongoCollection;
 import com.mongodb.reactivestreams.client.MongoDatabase;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonObject;
 import javax.json.JsonString;
+import javax.json.JsonStructure;
 import javax.json.JsonValue;
 import net.pincette.json.JsonUtil;
 import net.pincette.mongo.Features;
@@ -31,7 +35,6 @@ import net.pincette.mongo.Implementation;
 import net.pincette.mongo.JsonClient;
 import net.pincette.mongo.Operator;
 import org.bson.Document;
-import org.bson.conversions.Bson;
 
 /**
  * This is a set of MongoDB operator extensions.
@@ -97,8 +100,8 @@ public class MongoExpressions {
    * This extension is called <code>$jes-find</code>. Its expression is an object with the fields
    * <code>app</code>, <code>type</code> and <code>query</code>. All are mandatory. The
    * subexpressions <code>app</code> and <code>type</code>should generate a string. The <code>query
-   * </code> subexpression should be an object that represents a valid MongoDB query operator. The
-   * calculated value is a JSON array.
+   * </code> subexpression should be an object that represents a valid MongoDB query operator or an
+   * aggregation pipeline. The calculated value is a JSON array.
    *
    * @param database the MongoDB database.
    * @param environment the environment.
@@ -111,27 +114,35 @@ public class MongoExpressions {
   }
 
   private static CompletionStage<JsonValue> findArray(
-      final MongoCollection<Document> collection, final Bson filter) {
-    return JsonClient.find(collection, filter)
-        .thenApply(
-            r ->
-                r.stream()
-                    .reduce(createArrayBuilder(), JsonArrayBuilder::add, (b1, b2) -> b1)
-                    .build());
+      final MongoCollection<Document> collection, final JsonStructure query) {
+    return isObject(query)
+        ? JsonClient.find(collection, query.asJsonObject())
+            .thenApply(
+                r ->
+                    r.stream()
+                        .reduce(createArrayBuilder(), JsonArrayBuilder::add, (b1, b2) -> b1)
+                        .build())
+        : JsonClient.aggregate(collection, query.asJsonArray()).thenApply(JsonUtil::from);
   }
 
   private static CompletionStage<JsonValue> findObject(
-      final MongoCollection<Document> collection, final Bson filter) {
-    return JsonClient.findOne(collection, filter)
-        .thenApply(r -> r.map(j -> (JsonValue) j).orElse(NULL));
+      final MongoCollection<Document> collection, final JsonStructure query) {
+    final Function<List<JsonObject>, JsonValue> result =
+        list -> list.size() == 1 ? list.get(0) : NULL;
+
+    return isObject(query)
+        ? JsonClient.findOne(collection, query.asJsonObject())
+            .thenApply(r -> r.map(j -> (JsonValue) j).orElse(NULL))
+        : JsonClient.aggregate(collection, query.asJsonArray()).thenApply(result);
   }
 
   /**
    * This extension is called <code>$jes-findOne</code>. Its expression is an object with the fields
    * <code>app</code>, <code>type</code> and <code>query</code>. All are mandatory. The
    * subexpressions <code>app</code> and <code>type</code> should generate a string. The <code>query
-   * </code> subexpression should be an object that represents a valid MongoDB query operator. The
-   * calculated value is a JSON object or <code>NULL</code> if it doesn't exist.
+   * </code> subexpression should be an object that represents a valid MongoDB query operator or an
+   * aggregation pipeline. The calculated value is a JSON object or <code>NULL</code> if it doesn't
+   * exist.
    *
    * @param database the MongoDB database.
    * @param environment the environment.
@@ -147,7 +158,7 @@ public class MongoExpressions {
       final JsonValue expression,
       final MongoDatabase database,
       final String environment,
-      final BiFunction<MongoCollection<Document>, Bson, CompletionStage<JsonValue>> op,
+      final BiFunction<MongoCollection<Document>, JsonStructure, CompletionStage<JsonValue>> op,
       final Features features) {
     final Implementation app = memberFunction(expression, APP_FIELD, features);
     final Implementation query = memberFunction(expression, QUERY_FIELD, features);
@@ -156,8 +167,7 @@ public class MongoExpressions {
     return (json, vars) ->
         app != null && query != null && type != null
             ? Optional.of(query.apply(json, vars))
-                .filter(JsonUtil::isObject)
-                .map(JsonValue::asJsonObject)
+                .filter(value -> isObject(value) || isArray(value))
                 .flatMap(
                     value ->
                         tryToGetRethrow(
@@ -169,7 +179,7 @@ public class MongoExpressions {
                                                     string(app, json, vars),
                                                     string(type, json, vars)),
                                                 environment)),
-                                        fromJson(value))
+                                        (JsonStructure) value)
                                     .toCompletableFuture()
                                     .get()))
                 .orElse(NULL)
