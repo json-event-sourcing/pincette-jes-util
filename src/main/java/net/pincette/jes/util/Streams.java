@@ -1,7 +1,7 @@
 package net.pincette.jes.util;
 
 import static java.lang.Runtime.getRuntime;
-import static java.util.Arrays.stream;
+import static java.time.Duration.ofSeconds;
 import static java.util.stream.Collectors.toList;
 import static net.pincette.util.Pair.pair;
 import static net.pincette.util.Util.tryToDoRethrow;
@@ -38,6 +38,15 @@ import org.apache.kafka.streams.kstream.KStream;
  */
 public class Streams {
   private Streams() {}
+
+  private static void closeStreams(final List<KafkaStreams> streams, final CountDownLatch latch) {
+    streams.forEach(
+        s -> {
+          s.close(ofSeconds(5));
+          s.cleanUp();
+          latch.countDown();
+        });
+  }
 
   /**
    * Filters the <code>stream</code> leaving out duplicates according to the <code>criterion</code>
@@ -118,7 +127,7 @@ public class Streams {
 
   /**
    * This starts the <code>topologies</code> and waits for their completion. When the JVM is
-   * interrupted the streams are closed.
+   * interrupted or one of the streams fails all streams are closed.
    *
    * @param topologies the topologies to run with the Kafka properties to run them with. The keys
    *     should be strings and the values JSON strings. In the KStreams and KTables the type for the
@@ -130,38 +139,29 @@ public class Streams {
    */
   public static boolean start(final Stream<Pair<Topology, Properties>> topologies) {
     final List<Pair<Topology, Properties>> tpls = topologies.collect(toList());
-    final Boolean[] errors = new Boolean[tpls.size()];
+    final boolean[] error = new boolean[1];
     final CountDownLatch latch = new CountDownLatch(tpls.size());
-    final KafkaStreams[] streams = new KafkaStreams[tpls.size()];
+    final List<KafkaStreams> streams =
+        tpls.stream()
+            .map(t -> new KafkaStreams(t.first, streamsConfig(t.second)))
+            .collect(toList());
 
-    for (int i = 0; i < tpls.size(); ++i) {
-      streams[i] = new KafkaStreams(tpls.get(i).first, streamsConfig(tpls.get(i).second));
-      streams[i].setStateListener(
-          (newState, oldState) -> {
-            if (newState.equals(ERROR)) {
-              errors[0] = true;
-              latch.countDown();
-            }
-          });
-    }
+    streams.forEach(
+        s -> {
+          s.setStateListener(
+              (newState, oldState) -> {
+                if (newState.equals(ERROR)) {
+                  error[0] = true;
+                  closeStreams(streams, latch);
+                }
+              });
+          s.start();
+        });
 
-    getRuntime()
-        .addShutdownHook(
-            new Thread(
-                () -> {
-                  for (int i = 0; i < streams.length; ++i) {
-                    streams[i].close();
-                    latch.countDown();
-                  }
-                }));
-
-    for (int i = 0; i < streams.length; ++i) {
-      streams[i].start();
-    }
-
+    getRuntime().addShutdownHook(new Thread(() -> closeStreams(streams, latch)));
     tryToDoRethrow(latch::await);
 
-    return stream(errors).noneMatch(error -> error);
+    return !error[0];
   }
 
   /**
