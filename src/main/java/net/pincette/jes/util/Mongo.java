@@ -587,6 +587,7 @@ public class Mongo {
    * instances, starting from <code>snapshot</code>.
    *
    * @param events the event publisher.
+   * @param snapshot the snapshot from where reconstruction begins.
    * @return The aggregate instance publisher.
    * @since 1.2
    */

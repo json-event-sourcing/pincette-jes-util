@@ -23,6 +23,7 @@ public class Validation {
    * state of the aggregate instance.
    *
    * @param source the source of the validation specification.
+   * @param validators a validator management object.
    * @return The generated validation reducer.
    * @since 1.3
    * @see Validator

@@ -70,6 +70,7 @@ public class MongoExpressions {
    * in the event has transitioned between the two values produced by their expressions.
    *
    * @param expression the given expression.
+   * @param features extra features for expression implementations.
    * @return The implementation.
    * @since 1.3.2
    */
@@ -192,6 +193,7 @@ public class MongoExpressions {
    * subexpressions should generate a string. The calculated value is the href path.
    *
    * @param expression the given expression.
+   * @param features extra features for expression implementations.
    * @return The implementation.
    * @since 1.3
    */
@@ -205,6 +207,33 @@ public class MongoExpressions {
             ? createValue(
                 new Href(string(app, json, vars), string(type, json, vars), string(id, json, vars))
                     .path())
+            : NULL;
+  }
+
+  /**
+   * This extension is called <code>$jes-name-uuid</code>. Its expression is an object with the
+   * mandatory fields <code>scope</code> and <code>key</code>. The expression of the former should
+   * yield a string and that of the latter an integer.
+   *
+   * @param expression the given expression.
+   * @param features extra features for expression implementations.
+   * @return The implementation.
+   * @since 1.3.1
+   */
+  public static Implementation nameUUID(final JsonValue expression, final Features features) {
+    final Implementation scope = memberFunction(expression, SCOPE, features);
+    final Implementation key = memberFunction(expression, KEY, features);
+
+    return (json, vars) ->
+        scope != null && key != null
+            ? createValue(
+            nameUUIDFromBytes(
+                (asString(scope.apply(json, vars)).getString()
+                    + "#"
+                    + asLong(key.apply(json, vars)))
+                    .getBytes(UTF_8))
+                .toString()
+                .toLowerCase())
             : NULL;
   }
 
@@ -234,32 +263,6 @@ public class MongoExpressions {
     return implementation != null
         ? asString(implementation.apply(json, variables)).getString()
         : null;
-  }
-
-  /**
-   * This extension is called <code>$jes-name-uuid</code>. Its expression is an object with the
-   * mandatory fields <code>scope</code> and <code>key</code>. The expression of the former should
-   * yield a string and that of the latter an integer.
-   *
-   * @param expression the given expression.
-   * @return The implementation.
-   * @since 1.3.1
-   */
-  public static Implementation nameUUID(final JsonValue expression, final Features features) {
-    final Implementation scope = memberFunction(expression, SCOPE, features);
-    final Implementation key = memberFunction(expression, KEY, features);
-
-    return (json, vars) ->
-        scope != null && key != null
-            ? createValue(
-                nameUUIDFromBytes(
-                        (asString(scope.apply(json, vars)).getString()
-                                + "#"
-                                + asLong(key.apply(json, vars)))
-                            .getBytes(UTF_8))
-                    .toString()
-                    .toLowerCase())
-            : NULL;
   }
 
   /**
