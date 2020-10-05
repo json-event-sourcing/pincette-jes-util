@@ -246,7 +246,10 @@ public class Streams {
                 }
               });
           t.streams.start();
-          lifeCycle.started(t.topology, getApplication(t.properties));
+
+          if (lifeCycle != null) {
+            lifeCycle.started(t.topology, getApplication(t.properties));
+          }
         });
 
     getRuntime().addShutdownHook(new Thread(() -> closeStreams(tpls, latch, lifeCycle)));
