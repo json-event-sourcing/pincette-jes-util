@@ -28,6 +28,7 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.stream.Stream;
 import javax.json.JsonArrayBuilder;
@@ -74,10 +75,14 @@ public class Streams {
 
     topologies.forEach(
         t -> {
-          t.streams.close(ofSeconds(5));
-          t.streams.cleanUp();
+          closeStreams(t.streams);
           latch.countDown();
         });
+  }
+
+  private static void closeStreams(final KafkaStreams streams) {
+    streams.close(ofSeconds(5));
+    streams.cleanUp();
   }
 
   private static Properties copy(final Properties properties) {
@@ -187,8 +192,8 @@ public class Streams {
    * the streams are closed.
    *
    * @param topology the topology to run.
-   * @param properties the Kafka properties to run it with. The keys should be strings and the
-   *     values JSON strings. In the KStreams and KTables the type for the values is always <code>
+   * @param properties the Kafka properties to run it with. In the KStreams and KTables the type for
+   *     the values is always <code>
    *     javax.json.JsonObject</code>The processing guarantee will be set to at least once.
    * @param lifeCycle the object that is called when a topology is started and stopped.
    * @return Indicates success of failure of any of the topologies.
@@ -205,9 +210,8 @@ public class Streams {
    * This starts the <code>topologies</code> and waits for their completion. When the JVM is
    * interrupted or one of the streams fails all streams are closed.
    *
-   * @param topologies the topologies to run with the Kafka properties to run them with. The keys
-   *     should be strings and the values JSON strings. In the KStreams and KTables the type for the
-   *     values is always <code>
+   * @param topologies the topologies to run with the Kafka properties to run them with. In the
+   *     KStreams and KTables the type for the values is always <code>
    *     javax.json.JsonObject</code>The processing guarantee will be set to at least once.
    * @return Indicates success of failure of any of the topologies.
    * @see javax.json.JsonObject
@@ -256,6 +260,52 @@ public class Streams {
     tryToDoRethrow(latch::await);
 
     return !error[0];
+  }
+
+  /**
+   * Starts a Kafka Streams topology without blocking.
+   *
+   * @param topology the topology to run.
+   * @param properties the Kafka properties to run it with. In the KStreams and KTables the type for
+   *     the values is always <code>
+   *     javax.json.JsonObject</code>The processing guarantee will be set to at least once.
+   * @param lifeCycle the object that is called when a topology is started and stopped.
+   * @param onError the function that is called when a topology goes into the error state. Normally
+   *     you have to stop the topology completely, because it won't work anymore. Therefore, the
+   *     first argument is the stop function. The second one is the name of the application.
+   * @return The function with which the topology can be stopped.
+   * @since 1.3.8
+   */
+  public static Stop start(
+      final Topology topology,
+      final Properties properties,
+      final TopologyLifeCycle lifeCycle,
+      final BiConsumer<Stop, String> onError) {
+    final String application = getApplication(properties);
+    final KafkaStreams streams = new KafkaStreams(topology, streamsConfig(properties));
+    final Stop stop =
+        () -> {
+          closeStreams(streams);
+
+          if (lifeCycle != null) {
+            lifeCycle.stopped(topology, application);
+          }
+        };
+
+    streams.setStateListener(
+        (newState, oldState) -> {
+          if (newState.equals(ERROR)) {
+            onError.accept(stop, application);
+          }
+        });
+
+    streams.start();
+
+    if (lifeCycle != null) {
+      lifeCycle.started(topology, application);
+    }
+
+    return stop;
   }
 
   public static JsonObject startMessage(
@@ -364,6 +414,11 @@ public class Streams {
                 new TopologyEntry(
                     t.first, t.second, new KafkaStreams(t.first, streamsConfig(t.second))))
         .collect(toList());
+  }
+
+  @FunctionalInterface
+  public interface Stop {
+    void stop();
   }
 
   public interface TopologyLifeCycle {

@@ -4,10 +4,8 @@ import static com.mongodb.client.model.Aggregates.match;
 import static com.mongodb.client.model.Aggregates.sort;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Filters.exists;
 import static com.mongodb.client.model.Filters.gt;
-import static com.mongodb.client.model.Filters.not;
-import static com.mongodb.client.model.Filters.or;
+import static com.mongodb.client.model.Filters.ne;
 import static com.mongodb.client.model.Filters.regex;
 import static com.mongodb.client.model.Sorts.ascending;
 import static java.util.concurrent.CompletableFuture.completedFuture;
@@ -66,7 +64,7 @@ import org.reactivestreams.Publisher;
  * @since 1.0
  */
 public class Mongo {
-  public static final Bson NOT_DELETED = or(list(not(exists(DELETED)), eq(DELETED, false)));
+  public static final Bson NOT_DELETED = ne(DELETED, true);
   private static final String HREF = "href";
   private static final String RESOLVED = "_resolved";
 
