@@ -1,7 +1,6 @@
 package net.pincette.jes.util;
 
 import static java.lang.Runtime.getRuntime;
-import static java.time.Duration.ofSeconds;
 import static java.util.Optional.ofNullable;
 import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.toList;
@@ -81,7 +80,7 @@ public class Streams {
   }
 
   private static void closeStreams(final KafkaStreams streams) {
-    streams.close(ofSeconds(5));
+    streams.close();
     streams.cleanUp();
   }
 
@@ -283,14 +282,7 @@ public class Streams {
       final BiConsumer<Stop, String> onError) {
     final String application = getApplication(properties);
     final KafkaStreams streams = new KafkaStreams(topology, streamsConfig(properties));
-    final Stop stop =
-        () -> {
-          closeStreams(streams);
-
-          if (lifeCycle != null) {
-            lifeCycle.stopped(topology, application);
-          }
-        };
+    final Stop stop = new Stopper(streams, topology, lifeCycle, application);
 
     streams.setStateListener(
         (newState, oldState) -> {
@@ -425,6 +417,37 @@ public class Streams {
     void started(Topology topology, String application);
 
     void stopped(Topology topology, String application);
+  }
+
+  private static class Stopper implements Stop {
+    private final String application;
+    private final TopologyLifeCycle lifeCycle;
+    private final KafkaStreams streams;
+    private final Topology topology;
+    private boolean stopped;
+
+    private Stopper(
+        final KafkaStreams streams,
+        final Topology topology,
+        final TopologyLifeCycle lifeCycle,
+        final String application) {
+      this.streams = streams;
+      this.topology = topology;
+      this.lifeCycle = lifeCycle;
+      this.application = application;
+    }
+
+    public void stop() {
+      if (!stopped) {
+        closeStreams(streams);
+
+        if (lifeCycle != null) {
+          lifeCycle.stopped(topology, application);
+        }
+
+        stopped = true;
+      }
+    }
   }
 
   private static class TopologyEntry {
