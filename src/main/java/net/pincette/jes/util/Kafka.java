@@ -8,13 +8,17 @@ import static java.util.stream.Collectors.toMap;
 import static net.pincette.jes.util.JsonFields.CORR;
 import static net.pincette.util.Collections.map;
 import static net.pincette.util.Collections.merge;
+import static net.pincette.util.Collections.set;
+import static net.pincette.util.Collections.union;
 import static net.pincette.util.Pair.pair;
+import static org.apache.kafka.clients.producer.ProducerConfig.configNames;
 import static org.apache.kafka.streams.kstream.JoinWindows.of;
 
 import com.typesafe.config.Config;
 import java.time.Duration;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.stream.Stream;
@@ -80,7 +84,7 @@ public class Kafka {
       final Serializer<K> keySerializer,
       final Serializer<V> valueSerializer) {
     return new KafkaProducer<>(
-        merge(config, RELIABLE_PRODUCER_CONFIG), keySerializer, valueSerializer);
+        producerConfig(merge(config, RELIABLE_PRODUCER_CONFIG)), keySerializer, valueSerializer);
   }
 
   /**
@@ -116,6 +120,17 @@ public class Kafka {
     return stream(env.substring(KAFKA_PREFIX.length()).split("_"))
         .map(String::toLowerCase)
         .collect(joining("."));
+  }
+
+  private static Map<String, Object> producerConfig(final Map<String, Object> config) {
+    final Set<String> names =
+        union(
+            configNames(),
+            set("sasl.jaas.config", "sasl.mechanism", "ssl.endpoint.identification.algorithm"));
+
+    return config.entrySet().stream()
+        .filter(e -> names.contains(e.getKey()))
+        .collect(toMap(Entry::getKey, Entry::getValue));
   }
 
   /**
