@@ -12,12 +12,16 @@ import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
+import static java.util.stream.Stream.concat;
 import static net.pincette.jes.util.Command.isCommand;
 import static net.pincette.jes.util.Event.applyEvent;
 import static net.pincette.jes.util.Event.isEvent;
+import static net.pincette.jes.util.JsonFields.CORR;
 import static net.pincette.jes.util.JsonFields.DELETED;
 import static net.pincette.jes.util.JsonFields.ID;
+import static net.pincette.jes.util.JsonFields.OPS;
 import static net.pincette.jes.util.JsonFields.SEQ;
+import static net.pincette.jes.util.JsonFields.TIMESTAMP;
 import static net.pincette.jes.util.JsonFields.TYPE;
 import static net.pincette.jes.util.Util.isManagedObject;
 import static net.pincette.json.JsonUtil.add;
@@ -26,13 +30,21 @@ import static net.pincette.json.JsonUtil.createObjectBuilder;
 import static net.pincette.json.JsonUtil.emptyObject;
 import static net.pincette.json.JsonUtil.isObject;
 import static net.pincette.json.Transform.transform;
+import static net.pincette.mongo.BsonUtil.fromJson;
+import static net.pincette.mongo.Collection.deleteOne;
+import static net.pincette.mongo.Collection.exec;
+import static net.pincette.mongo.Patch.updateOperators;
 import static net.pincette.rs.Reducer.reduce;
 import static net.pincette.rs.Util.subscribe;
 import static net.pincette.util.Collections.list;
 import static net.pincette.util.Pair.pair;
 import static net.pincette.util.StreamUtil.composeAsyncStream;
 import static net.pincette.util.Util.must;
+import static net.pincette.util.Util.rethrow;
 
+import com.mongodb.bulk.BulkWriteResult;
+import com.mongodb.client.model.BulkWriteOptions;
+import com.mongodb.client.model.UpdateOneModel;
 import com.mongodb.reactivestreams.client.AggregatePublisher;
 import com.mongodb.reactivestreams.client.ClientSession;
 import com.mongodb.reactivestreams.client.FindPublisher;
@@ -47,6 +59,7 @@ import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
+import javax.json.JsonValue;
 import net.pincette.json.JsonUtil;
 import net.pincette.json.Transform.JsonEntry;
 import net.pincette.json.Transform.Transformer;
@@ -67,6 +80,7 @@ public class Mongo {
   public static final Bson NOT_DELETED = ne(DELETED, true);
   private static final String HREF = "href";
   private static final String RESOLVED = "_resolved";
+  private static final String SET = "$set";
 
   private Mongo() {}
 
@@ -91,7 +105,7 @@ public class Mongo {
    * @since 1.0.4
    * @deprecated Use {@link JsonClient#aggregate(MongoCollection, List)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<List<JsonObject>> aggregate(
       final MongoCollection<Document> collection, final List<? extends Bson> pipeline) {
     return JsonClient.aggregate(collection, pipeline);
@@ -107,7 +121,7 @@ public class Mongo {
    * @since 1.1.2
    * @deprecated User {@link JsonClient#aggregate(MongoCollection, ClientSession, List)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<List<JsonObject>> aggregate(
       final MongoCollection<Document> collection,
       final ClientSession session,
@@ -125,7 +139,7 @@ public class Mongo {
    * @since 1.0.4
    * @deprecated Use {@link JsonClient#aggregate(MongoCollection, List, UnaryOperator)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<List<JsonObject>> aggregate(
       final MongoCollection<Document> collection,
       final List<? extends Bson> pipeline,
@@ -145,7 +159,7 @@ public class Mongo {
    * @deprecated Use {@link JsonClient#aggregate(MongoCollection, ClientSession, List,
    *     UnaryOperator)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<List<JsonObject>> aggregate(
       final MongoCollection<Document> collection,
       final ClientSession session,
@@ -163,7 +177,7 @@ public class Mongo {
    * @since 1.1
    * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, List)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static Publisher<JsonObject> aggregationPublisher(
       final MongoCollection<Document> collection, final List<? extends Bson> pipeline) {
     return JsonClient.aggregationPublisher(collection, pipeline);
@@ -179,7 +193,7 @@ public class Mongo {
    * @since 1.1
    * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, List, UnaryOperator)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static Publisher<JsonObject> aggregationPublisher(
       final MongoCollection<Document> collection,
       final List<? extends Bson> pipeline,
@@ -199,7 +213,7 @@ public class Mongo {
    * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, ClientSession, List,
    *     UnaryOperator)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static Publisher<JsonObject> aggregationPublisher(
       final MongoCollection<Document> collection,
       final ClientSession session,
@@ -289,7 +303,7 @@ public class Mongo {
    * @since 1.0.2
    * @deprecated Use {@link JsonClient#find(MongoCollection, Bson)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<List<JsonObject>> find(
       final MongoCollection<Document> collection, final Bson filter) {
     return JsonClient.find(collection, filter);
@@ -305,7 +319,7 @@ public class Mongo {
    * @since 1.1.2
    * @deprecated Use {@link JsonClient#find(MongoCollection, ClientSession, Bson)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<List<JsonObject>> find(
       final MongoCollection<Document> collection, final ClientSession session, final Bson filter) {
     return JsonClient.find(collection, session, filter);
@@ -321,7 +335,7 @@ public class Mongo {
    * @since 1.0.2
    * @deprecated Use {@link JsonClient#find(MongoCollection, Bson, UnaryOperator)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<List<JsonObject>> find(
       final MongoCollection<Document> collection,
       final Bson filter,
@@ -340,7 +354,7 @@ public class Mongo {
    * @since 1.0.2
    * @deprecated User {@link JsonClient#find(MongoCollection, ClientSession, Bson, UnaryOperator)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<List<JsonObject>> find(
       final MongoCollection<Document> collection,
       final ClientSession session,
@@ -374,7 +388,7 @@ public class Mongo {
    * @since 1.1
    * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, Bson)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static Publisher<JsonObject> findPublisher(
       final MongoCollection<Document> collection, final Bson filter) {
     return JsonClient.findPublisher(collection, filter);
@@ -390,7 +404,7 @@ public class Mongo {
    * @since 1.1
    * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, Bson, UnaryOperator)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static Publisher<JsonObject> findPublisher(
       final MongoCollection<Document> collection,
       final Bson filter,
@@ -410,7 +424,7 @@ public class Mongo {
    * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, ClientSession, Bson,
    *     UnaryOperator)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static Publisher<JsonObject> findPublisher(
       final MongoCollection<Document> collection,
       final ClientSession session,
@@ -429,7 +443,7 @@ public class Mongo {
    * @since 1.0.2
    * @deprecated Use {@link JsonClient#findOne(MongoCollection, Bson)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<Optional<JsonObject>> findOne(
       final MongoCollection<Document> collection, final Bson filter) {
     return JsonClient.findOne(collection, filter);
@@ -446,7 +460,7 @@ public class Mongo {
    * @since 1.1.2
    * @deprecated Use {@link JsonClient#findOne(MongoCollection, ClientSession, Bson)}.
    */
-  @Deprecated
+  @Deprecated(forRemoval = true)
   public static CompletionStage<Optional<JsonObject>> findOne(
       final MongoCollection<Document> collection, final ClientSession session, final Bson filter) {
     return JsonClient.findOne(collection, session, filter);
@@ -701,6 +715,40 @@ public class Mongo {
     return environment != null ? ("-" + environment) : "";
   }
 
+  private static JsonObject technicalUpdateOperator(final JsonObject event) {
+    return createObjectBuilder()
+        .add(
+            SET,
+            createObjectBuilder()
+                .add(SEQ, event.getInt(SEQ))
+                .add(CORR, event.getString(CORR))
+                .add(TIMESTAMP, event.getJsonNumber(TIMESTAMP)))
+        .build();
+  }
+
+  /**
+   * This removes the additions made by the <code>resolve</code> method.
+   *
+   * @param aggregate the given aggregate instance.
+   * @return The unresolved aggregate instance.
+   * @since 1.1.3
+   */
+  public static JsonObject unresolve(final JsonObject aggregate) {
+    return transform(
+        aggregate,
+        new Transformer(
+            entry -> isObject(entry.value) && entry.value.asJsonObject().containsKey(RESOLVED),
+            entry ->
+                Optional.of(
+                    new JsonEntry(
+                        entry.path,
+                        copy(
+                                entry.value.asJsonObject(),
+                                createObjectBuilder(),
+                                key -> key.equals(HREF))
+                            .build()))));
+  }
+
   /**
    * Updates <code>json</code> in the collection of which the name is <code>
    * &lt;aggregate-type&gt;-(event-|command-|-)&lt;environment&gt;</code>. The identifier in the
@@ -786,26 +834,42 @@ public class Mongo {
   }
 
   /**
-   * This removes the additions made by the <code>resolve</code> method.
+   * This updates an aggregate instance with the smallest number of changes using the operations in
+   * the event.
    *
-   * @param aggregate the given aggregate instance.
-   * @return The unresolved aggregate instance.
-   * @since 1.1.3
+   * @param collection the aggregate collection.
+   * @param currentState the current state of the aggregate instance that is about to be changed.
+   * @param event the event with the operations.
+   * @return Whether the update was successful or not.
+   * @since 1.3.11
    */
-  public static JsonObject unresolve(final JsonObject aggregate) {
-    return transform(
-        aggregate,
-        new Transformer(
-            entry -> isObject(entry.value) && entry.value.asJsonObject().containsKey(RESOLVED),
-            entry ->
-                Optional.of(
-                    new JsonEntry(
-                        entry.path,
-                        copy(
-                                entry.value.asJsonObject(),
-                                createObjectBuilder(),
-                                key -> key.equals(HREF))
-                            .build()))));
+  public static CompletionStage<Boolean> updateAggregate(
+      final MongoCollection<Document> collection,
+      final JsonObject currentState,
+      final JsonObject event) {
+    final Bson filter = eq(ID, currentState.getString(ID));
+
+    return exec(
+            collection,
+            c ->
+                c.bulkWrite(
+                    concat(
+                            Stream.of(technicalUpdateOperator(event)),
+                            updateOperators(
+                                currentState,
+                                event.getJsonArray(OPS).stream()
+                                    .filter(JsonUtil::isObject)
+                                    .map(JsonValue::asJsonObject)))
+                        .map(op -> new UpdateOneModel<Document>(filter, fromJson(op)))
+                        .collect(toList()),
+                    new BulkWriteOptions().ordered(true)))
+        .thenApply(BulkWriteResult::wasAcknowledged)
+        .exceptionally(
+            e -> {
+              deleteOne(collection, filter);
+              rethrow(e);
+              return false;
+            });
   }
 
   /**

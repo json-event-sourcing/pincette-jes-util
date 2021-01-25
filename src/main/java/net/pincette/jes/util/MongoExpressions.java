@@ -133,7 +133,7 @@ public class MongoExpressions {
 
     return isObject(query)
         ? JsonClient.findOne(collection, query.asJsonObject())
-            .thenApply(r -> r.map(j -> (JsonValue) j).orElse(NULL))
+            .thenApply(r -> r.map(JsonValue.class::cast).orElse(NULL))
         : JsonClient.aggregate(collection, query.asJsonArray()).thenApply(result);
   }
 
@@ -227,13 +227,13 @@ public class MongoExpressions {
     return (json, vars) ->
         scope != null && key != null
             ? createValue(
-            nameUUIDFromBytes(
-                (asString(scope.apply(json, vars)).getString()
-                    + "#"
-                    + asLong(key.apply(json, vars)))
-                    .getBytes(UTF_8))
-                .toString()
-                .toLowerCase())
+                nameUUIDFromBytes(
+                        (asString(scope.apply(json, vars)).getString()
+                                + "#"
+                                + asLong(key.apply(json, vars)))
+                            .getBytes(UTF_8))
+                    .toString()
+                    .toLowerCase())
             : NULL;
   }
 
