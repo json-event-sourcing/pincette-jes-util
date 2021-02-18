@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonObject;
@@ -280,6 +281,30 @@ public class Streams {
       final Properties properties,
       final TopologyLifeCycle lifeCycle,
       final BiConsumer<Stop, String> onError) {
+    return start(topology, properties, lifeCycle, onError, null);
+  }
+
+  /**
+   * Starts a Kafka Streams topology without blocking.
+   *
+   * @param topology the topology to run.
+   * @param properties the Kafka properties to run it with. In the KStreams and KTables the type for
+   *     the values is always <code>
+   *     javax.json.JsonObject</code>The processing guarantee will be set to at least once.
+   * @param lifeCycle the object that is called when a topology is started and stopped.
+   * @param onError the function that is called when a topology goes into the error state. Normally
+   *     you have to stop the topology completely, because it won't work anymore. Therefore, the
+   *     first argument is the stop function. The second one is the name of the application.
+   * @param uncaughtExceptions the handler for uncaught exceptions.
+   * @return The function with which the topology can be stopped.
+   * @since 1.3.12
+   */
+  public static Stop start(
+      final Topology topology,
+      final Properties properties,
+      final TopologyLifeCycle lifeCycle,
+      final BiConsumer<Stop, String> onError,
+      final Consumer<Throwable> uncaughtExceptions) {
     final String application = getApplication(properties);
     final KafkaStreams streams = new KafkaStreams(topology, streamsConfig(properties));
     final Stop stop = new Stopper(streams, topology, lifeCycle, application);
@@ -290,6 +315,10 @@ public class Streams {
             onError.accept(stop, application);
           }
         });
+
+    if (uncaughtExceptions != null) {
+      streams.setUncaughtExceptionHandler((t, e) -> uncaughtExceptions.accept(e));
+    }
 
     streams.start();
 
