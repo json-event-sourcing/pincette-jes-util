@@ -3,6 +3,7 @@ package net.pincette.jes.util;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.UUID.nameUUIDFromBytes;
 import static java.util.UUID.randomUUID;
+import static javax.json.JsonValue.FALSE;
 import static javax.json.JsonValue.NULL;
 import static net.pincette.jes.util.Mongo.collection;
 import static net.pincette.json.JsonUtil.asLong;
@@ -11,6 +12,7 @@ import static net.pincette.json.JsonUtil.createArrayBuilder;
 import static net.pincette.json.JsonUtil.createValue;
 import static net.pincette.json.JsonUtil.isArray;
 import static net.pincette.json.JsonUtil.isObject;
+import static net.pincette.mongo.Expression.implementation;
 import static net.pincette.mongo.Expression.memberFunction;
 import static net.pincette.util.Collections.map;
 import static net.pincette.util.Pair.pair;
@@ -23,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import javax.json.JsonArrayBuilder;
 import javax.json.JsonObject;
@@ -43,6 +46,7 @@ import org.bson.Document;
  * @since 1.3
  */
 public class MongoExpressions {
+  private static final String ADDED = "$jes-added";
   private static final String APP_FIELD = "app";
   private static final String CHANGED = "$jes-changed";
   private static final String FIND_ONE_OP = "$jes-findOne";
@@ -54,6 +58,7 @@ public class MongoExpressions {
   private static final String NAME_UUID = "$jes-name-uuid";
   private static final String POINTER = "pointer";
   private static final String QUERY_FIELD = "query";
+  private static final String REMOVED = "$jes-removed";
   private static final String SCOPE = "scope";
   private static final String TO = "to";
   private static final String TYPE_FIELD = "type";
@@ -62,12 +67,27 @@ public class MongoExpressions {
   private MongoExpressions() {}
 
   /**
+   * This extension is called <code>$jes-added</code>. Its expression is an object with the field
+   * <code>pointer</code>. It should be an expression that yields a JSON pointer. The operator
+   * returns <code>true</code> if the pointed field was added in the event.
+   *
+   * @param expression the given expression.
+   * @param features extra features for expression implementations.
+   * @return The implementation.
+   * @since 1.4.1
+   */
+  public static Implementation added(final JsonValue expression, final Features features) {
+    return changedSimple(expression, features, Event::added);
+  }
+
+  /**
    * This extension is called <code>$jes-changed</code>. Its expression is an object with the fields
    * <code>pointer</code>, <code>from</code> and <code>to</code>. Only the first field is mandatory.
    * It should be an expression that yields a JSON pointer. The operator returns <code>true</code>
    * if the pointed field has changed in the event. If both the <code>from</code> and <code>to
    * </code> fields are present then the operator returns <code>true</code> when the pointed field
-   * in the event has transitioned between the two values produced by their expressions.
+   * in the event has transitioned between the two values produced by their expressions. In that
+   * case the event should be a full event, which has the <code>_before</code> field.
    *
    * @param expression the given expression.
    * @param features extra features for expression implementations.
@@ -81,10 +101,7 @@ public class MongoExpressions {
 
     return (json, vars) ->
         pointer != null
-            ? Optional.of(pointer.apply(json, vars))
-                .filter(JsonUtil::isString)
-                .map(JsonUtil::asString)
-                .map(JsonString::getString)
+            ? pointer(pointer, json, vars)
                 .map(
                     p ->
                         createValue(
@@ -93,8 +110,18 @@ public class MongoExpressions {
                                     && Event.changed(
                                         json, p, from.apply(json, vars), to.apply(json, vars)))
                                 || ((from == null || to == null) && Event.changed(json, p))))
-                .orElse(NULL)
+                .orElse(FALSE)
             : NULL;
+  }
+
+  private static Implementation changedSimple(
+      final JsonValue expression,
+      final Features features,
+      final BiPredicate<JsonObject, String> op) {
+    final Implementation pointer = implementation(expression, features);
+
+    return (json, vars) ->
+        pointer(pointer, json, vars).map(p -> createValue(op.test(json, p))).orElse(FALSE);
   }
 
   /**
@@ -248,12 +275,36 @@ public class MongoExpressions {
   public static Map<String, Operator> operators(
       final MongoDatabase database, final String environment) {
     return map(
+        pair(ADDED, MongoExpressions::added),
         pair(CHANGED, MongoExpressions::changed),
         pair(FIND_ONE_OP, findOne(database, environment)),
         pair(FIND_OP, find(database, environment)),
         pair(HREF_OP, MongoExpressions::href),
         pair(NAME_UUID, MongoExpressions::nameUUID),
+        pair(REMOVED, MongoExpressions::removed),
         pair(UUID, (e, f) -> uuid()));
+  }
+
+  private static Optional<String> pointer(
+      final Implementation fn, final JsonObject json, final Map<String, JsonValue> vars) {
+    return Optional.of(fn.apply(json, vars))
+        .filter(JsonUtil::isString)
+        .map(JsonUtil::asString)
+        .map(JsonString::getString);
+  }
+
+  /**
+   * This extension is called <code>$jes-removed</code>. Its expression is an object with the field
+   * <code>pointer</code>. It should be an expression that yields a JSON pointer. The operator
+   * returns <code>true</code> if the pointed field was removed in the event.
+   *
+   * @param expression the given expression.
+   * @param features extra features for expression implementations.
+   * @return The implementation.
+   * @since 1.4.1
+   */
+  public static Implementation removed(final JsonValue expression, final Features features) {
+    return changedSimple(expression, features, Event::removed);
   }
 
   private static String string(

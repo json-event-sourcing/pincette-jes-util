@@ -55,7 +55,11 @@ public class Href {
    * @since 1.0
    */
   public Href(final String href) {
-    this(getPath(href)[0], getPath(href)[1], getId(href));
+    final String[] path = getPath(href);
+
+    id = getId(path);
+    app = path[path.length - (id != null ? 3 : 2)];
+    type = addPrefix(app, path[path.length - (id != null ? 2 : 1)]);
   }
 
   private static String addPrefix(final String app, final String type) {
@@ -65,21 +69,17 @@ public class Href {
         .orElse(type);
   }
 
-  private static String getHref(final String href) {
-    return contextPath != null ? href.substring(contextPath.length()) : href;
-  }
-
-  private static String getId(final String href) {
-    return Optional.of(getPath(href))
-        .filter(path -> path.length == 3)
-        .map(path -> path[2])
+  private static String getId(final String[] path) {
+    return Optional.of(path)
+        .map(p -> p[p.length - 1])
+        .filter(net.pincette.util.Util::isUUID)
         .orElse(null);
   }
 
   private static String[] getPath(final String href) {
-    final String[] path = split(getHref(href));
+    final String[] path = split(href);
 
-    if (path.length < 2 || path.length > 3) {
+    if (path.length < 2 || (getId(path) != null && path.length < 3)) {
       throw new GeneralException("Invalid href " + href);
     }
 
@@ -101,6 +101,10 @@ public class Href {
    * @since 1.0.1
    */
   public static void setContextPath(final String path) {
+    if (contextPath != null) {
+      throw new GeneralException("The href context path can be set only once.");
+    }
+
     contextPath = path;
   }
 

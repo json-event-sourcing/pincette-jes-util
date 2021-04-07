@@ -40,6 +40,24 @@ public class Event {
   private Event() {}
 
   /**
+   * Returns <code>true</code> if the field at <code>jsonPointer</code> was added. It examines the
+   * <code>_ops</code> field for this.
+   *
+   * @param event the full event, which has the <code>_before</code> field.
+   * @param jsonPointer the path into the aggregate.
+   * @return <code>true</code> when the event expresses the addition of the given field.
+   * @since 1.4.1
+   */
+  public static boolean added(final JsonObject event, final String jsonPointer) {
+    return Optional.ofNullable(event.getJsonArray(OPS))
+        .flatMap(
+            ops ->
+                Optional.ofNullable(event.getJsonObject(BEFORE)).map(before -> pair(ops, before)))
+        .map(pair -> Patch.added(pair.first, pair.second, jsonPointer))
+        .orElse(false);
+  }
+
+  /**
    * Applies an event to an aggregate instance, which results in the next version of the aggregate.
    *
    * @param aggregate the given aggregate instance.
@@ -102,7 +120,7 @@ public class Event {
    * in <code>from</code> to the value in <code>to</code>. It examines the <code>_ops</code> field
    * for this.
    *
-   * @param event the event.
+   * @param event the full event, which has the <code>_before</code> field.
    * @param jsonPointer the path into the aggregate.
    * @param from the original value.
    * @param to the new value.
@@ -154,6 +172,21 @@ public class Event {
    */
   public static boolean isNext(final JsonObject aggregate, final JsonObject event) {
     return event.getInt(SEQ) == aggregate.getInt(SEQ) + 1;
+  }
+
+  /**
+   * Returns <code>true</code> if the field at <code>jsonPointer</code> was removed. It examines the
+   * <code>_ops</code> field for this.
+   *
+   * @param event the event.
+   * @param jsonPointer the path into the aggregate.
+   * @return <code>true</code> when the event expresses the removal of the given field.
+   * @since 1.4.1
+   */
+  public static boolean removed(final JsonObject event, final String jsonPointer) {
+    return Optional.ofNullable(event.getJsonArray(OPS))
+        .map(ops -> Patch.removed(ops, jsonPointer))
+        .orElse(false);
   }
 
   /**
