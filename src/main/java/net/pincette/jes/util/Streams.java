@@ -18,6 +18,7 @@ import static org.apache.kafka.streams.StreamsConfig.DEFAULT_DESERIALIZATION_EXC
 import static org.apache.kafka.streams.StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG;
 import static org.apache.kafka.streams.StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG;
 import static org.apache.kafka.streams.StreamsConfig.PROCESSING_GUARANTEE_CONFIG;
+import static org.apache.kafka.streams.errors.StreamsUncaughtExceptionHandler.StreamThreadExceptionResponse.REPLACE_THREAD;
 
 import com.typesafe.config.Config;
 import java.time.Duration;
@@ -317,7 +318,11 @@ public class Streams {
         });
 
     if (uncaughtExceptions != null) {
-      streams.setUncaughtExceptionHandler((t, e) -> uncaughtExceptions.accept(e));
+      streams.setUncaughtExceptionHandler(
+          e -> {
+            uncaughtExceptions.accept(e);
+            return REPLACE_THREAD;
+          });
     }
 
     streams.start();

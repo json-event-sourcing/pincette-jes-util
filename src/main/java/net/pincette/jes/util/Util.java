@@ -3,17 +3,27 @@ package net.pincette.jes.util;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static net.pincette.jes.util.Command.hasError;
 import static net.pincette.jes.util.Event.applyEvent;
+import static net.pincette.jes.util.JsonFields.COMMAND;
+import static net.pincette.jes.util.JsonFields.CORR;
 import static net.pincette.jes.util.JsonFields.ID;
+import static net.pincette.jes.util.JsonFields.JWT;
+import static net.pincette.jes.util.JsonFields.LANGUAGES;
 import static net.pincette.jes.util.JsonFields.SEQ;
+import static net.pincette.jes.util.JsonFields.TEST;
+import static net.pincette.jes.util.JsonFields.TIMESTAMP;
 import static net.pincette.jes.util.JsonFields.TYPE;
+import static net.pincette.json.JsonUtil.createObjectBuilder;
 import static net.pincette.json.JsonUtil.getNumber;
 import static net.pincette.json.JsonUtil.getString;
 import static net.pincette.json.filter.Util.stream;
+import static net.pincette.util.Collections.set;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 import javax.json.JsonArray;
 import javax.json.JsonObject;
+import javax.json.JsonObjectBuilder;
 import javax.json.JsonValue;
 import javax.json.stream.JsonParser;
 import net.pincette.json.JsonUtil;
@@ -25,6 +35,9 @@ import net.pincette.json.JsonUtil;
  * @since 1.0
  */
 public class Util {
+  private static final Set<String> TECHNICAL_FIELDS =
+      set(COMMAND, CORR, ID, JWT, LANGUAGES, SEQ, TEST, TIMESTAMP, TYPE);
+
   private Util() {}
 
   /**
@@ -139,5 +152,18 @@ public class Util {
    */
   public static Stream<JsonObject> reconstruct(final Stream<? extends JsonValue> events) {
     return events.filter(JsonUtil::isObject).map(JsonValue::asJsonObject).map(applyEvent());
+  }
+
+  /**
+   * Removes all the technical fields JES uses.
+   *
+   * @param json the given JSON object.
+   * @return The new JSON object.
+   * @since 1.4.2
+   * @see JsonFields
+   */
+  public static JsonObjectBuilder removeTechnical(final JsonObject json) {
+    return TECHNICAL_FIELDS.stream()
+        .reduce(createObjectBuilder(json), JsonObjectBuilder::remove, (b1, b2) -> b1);
   }
 }

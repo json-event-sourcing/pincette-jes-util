@@ -241,18 +241,18 @@ public class Kafka {
    * Sends a message to Kafka asynchronously.
    *
    * @param producer the used producer.
-   * @param record the record to be sent.
+   * @param rec the record to be sent.
    * @param <K> the key type.
    * @param <V> the value type.
    * @return <code>true</code> if the request was successful, <code>false</code> otherwise.
    * @since 1.0
    */
   public static <K, V> CompletionStage<Boolean> send(
-      final KafkaProducer<K, V> producer, final ProducerRecord<K, V> record) {
+      final KafkaProducer<K, V> producer, final ProducerRecord<K, V> rec) {
     final CompletableFuture<Boolean> completableFuture = new CompletableFuture<>();
 
     producer.send(
-        record,
+        rec,
         (metadata, exception) -> {
           if (exception != null) {
             completableFuture.completeExceptionally(exception);
