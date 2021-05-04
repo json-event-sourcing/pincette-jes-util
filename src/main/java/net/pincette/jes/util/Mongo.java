@@ -8,6 +8,7 @@ import static com.mongodb.client.model.Filters.gt;
 import static com.mongodb.client.model.Filters.ne;
 import static com.mongodb.client.model.Filters.regex;
 import static com.mongodb.client.model.Sorts.ascending;
+import static java.util.Optional.ofNullable;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
@@ -671,15 +672,21 @@ public class Mongo {
         json,
         new Transformer(
             entry -> isObject(entry.value) && hrefOnly(entry.value.asJsonObject()),
-            entry ->
-                Optional.of(
-                    new JsonEntry(
-                        entry.path,
-                        add(
-                                createObjectBuilder(entry.value.asJsonObject()).add(RESOLVED, true),
-                                fetchedHrefs.get(
-                                    new Href(entry.value.asJsonObject().getString(HREF))))
-                            .build()))));
+            entry -> Optional.of(resolve(entry, fetchedHrefs))));
+  }
+
+  private static JsonEntry resolve(
+      final JsonEntry entry, final Map<Href, JsonObject> fetchedHrefs) {
+    return new JsonEntry(
+        entry.path,
+        ofNullable(fetchedHrefs.get(new Href(entry.value.asJsonObject().getString(HREF))))
+            .map(
+                fetched ->
+                    add(
+                            createObjectBuilder(entry.value.asJsonObject()).add(RESOLVED, true),
+                            fetched)
+                        .build())
+            .orElse(entry.value.asJsonObject()));
   }
 
   /**
