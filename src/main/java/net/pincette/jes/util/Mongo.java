@@ -46,9 +46,7 @@ import static net.pincette.util.Util.rethrow;
 import com.mongodb.bulk.BulkWriteResult;
 import com.mongodb.client.model.BulkWriteOptions;
 import com.mongodb.client.model.UpdateOneModel;
-import com.mongodb.reactivestreams.client.AggregatePublisher;
 import com.mongodb.reactivestreams.client.ClientSession;
-import com.mongodb.reactivestreams.client.FindPublisher;
 import com.mongodb.reactivestreams.client.MongoCollection;
 import com.mongodb.reactivestreams.client.MongoDatabase;
 import java.util.List;
@@ -57,7 +55,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
-import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
 import javax.json.JsonValue;
@@ -66,7 +63,6 @@ import net.pincette.json.Transform.JsonEntry;
 import net.pincette.json.Transform.Transformer;
 import net.pincette.mongo.JsonClient;
 import net.pincette.rs.Mapper;
-import org.bson.BsonDocument;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.reactivestreams.Publisher;
@@ -95,132 +91,6 @@ public class Mongo {
    */
   public static Bson addNotDeleted(final Bson query) {
     return and(list(query, NOT_DELETED));
-  }
-
-  /**
-   * Finds JSON objects that come out of <code>pipeline</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param pipeline the given pipeline.
-   * @return The list of objects.
-   * @since 1.0.4
-   * @deprecated Use {@link JsonClient#aggregate(MongoCollection, List)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<List<JsonObject>> aggregate(
-      final MongoCollection<Document> collection, final List<? extends Bson> pipeline) {
-    return JsonClient.aggregate(collection, pipeline);
-  }
-
-  /**
-   * Finds JSON objects that come out of <code>pipeline</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param session the MongoDB session.
-   * @param pipeline the given pipeline.
-   * @return The list of objects.
-   * @since 1.1.2
-   * @deprecated User {@link JsonClient#aggregate(MongoCollection, ClientSession, List)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<List<JsonObject>> aggregate(
-      final MongoCollection<Document> collection,
-      final ClientSession session,
-      final List<? extends Bson> pipeline) {
-    return JsonClient.aggregate(collection, session, pipeline);
-  }
-
-  /**
-   * Finds JSON objects that come out of <code>pipeline</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param pipeline the given pipeline.
-   * @param setParameters a function to set the parameters for the result set.
-   * @return The list of objects.
-   * @since 1.0.4
-   * @deprecated Use {@link JsonClient#aggregate(MongoCollection, List, UnaryOperator)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<List<JsonObject>> aggregate(
-      final MongoCollection<Document> collection,
-      final List<? extends Bson> pipeline,
-      final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return JsonClient.aggregate(collection, pipeline, setParameters);
-  }
-
-  /**
-   * Finds JSON objects that come out of <code>pipeline</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param session the MongoDB session.
-   * @param pipeline the given pipeline.
-   * @param setParameters a function to set the parameters for the result set.
-   * @return The list of objects.
-   * @since 1.1.2
-   * @deprecated Use {@link JsonClient#aggregate(MongoCollection, ClientSession, List,
-   *     UnaryOperator)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<List<JsonObject>> aggregate(
-      final MongoCollection<Document> collection,
-      final ClientSession session,
-      final List<? extends Bson> pipeline,
-      final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return JsonClient.aggregate(collection, session, pipeline, setParameters);
-  }
-
-  /**
-   * Finds JSON objects that come out of <code>pipeline</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param pipeline the given pipeline.
-   * @return The object publisher.
-   * @since 1.1
-   * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, List)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static Publisher<JsonObject> aggregationPublisher(
-      final MongoCollection<Document> collection, final List<? extends Bson> pipeline) {
-    return JsonClient.aggregationPublisher(collection, pipeline);
-  }
-
-  /**
-   * Finds JSON objects that come out of <code>pipeline</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param pipeline the given pipeline.
-   * @param setParameters a function to set the parameters for the result set.
-   * @return The object publisher.
-   * @since 1.1
-   * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, List, UnaryOperator)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static Publisher<JsonObject> aggregationPublisher(
-      final MongoCollection<Document> collection,
-      final List<? extends Bson> pipeline,
-      final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return JsonClient.aggregationPublisher(collection, pipeline, setParameters);
-  }
-
-  /**
-   * Finds JSON objects that come out of <code>pipeline</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param session the MongoDB session.
-   * @param pipeline the given pipeline.
-   * @param setParameters a function to set the parameters for the result set.
-   * @return The object publisher.
-   * @since 1.1.2
-   * @deprecated Use {@link JsonClient#aggregationPublisher(MongoCollection, ClientSession, List,
-   *     UnaryOperator)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static Publisher<JsonObject> aggregationPublisher(
-      final MongoCollection<Document> collection,
-      final ClientSession session,
-      final List<? extends Bson> pipeline,
-      final UnaryOperator<AggregatePublisher<BsonDocument>> setParameters) {
-    return JsonClient.aggregationPublisher(collection, session, pipeline, setParameters);
   }
 
   static String collection(final JsonObject json, final String environment) {
@@ -296,75 +166,6 @@ public class Mongo {
   }
 
   /**
-   * Finds JSON objects that match <code>filter</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param filter the given filter.
-   * @return The list of objects.
-   * @since 1.0.2
-   * @deprecated Use {@link JsonClient#find(MongoCollection, Bson)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<List<JsonObject>> find(
-      final MongoCollection<Document> collection, final Bson filter) {
-    return JsonClient.find(collection, filter);
-  }
-
-  /**
-   * Finds JSON objects that match <code>filter</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param session the MongoDB session.
-   * @param filter the given filter.
-   * @return The list of objects.
-   * @since 1.1.2
-   * @deprecated Use {@link JsonClient#find(MongoCollection, ClientSession, Bson)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<List<JsonObject>> find(
-      final MongoCollection<Document> collection, final ClientSession session, final Bson filter) {
-    return JsonClient.find(collection, session, filter);
-  }
-
-  /**
-   * Finds JSON objects that match <code>filter</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param filter the given filter.
-   * @param setParameters a function to set the parameters for the result set.
-   * @return The list of objects.
-   * @since 1.0.2
-   * @deprecated Use {@link JsonClient#find(MongoCollection, Bson, UnaryOperator)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<List<JsonObject>> find(
-      final MongoCollection<Document> collection,
-      final Bson filter,
-      final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return JsonClient.find(collection, filter, setParameters);
-  }
-
-  /**
-   * Finds JSON objects that match <code>filter</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param session the MongoDB session.
-   * @param filter the given filter.
-   * @param setParameters a function to set the parameters for the result set.
-   * @return The list of objects.
-   * @since 1.0.2
-   * @deprecated User {@link JsonClient#find(MongoCollection, ClientSession, Bson, UnaryOperator)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<List<JsonObject>> find(
-      final MongoCollection<Document> collection,
-      final ClientSession session,
-      final Bson filter,
-      final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return JsonClient.find(collection, session, filter, setParameters);
-  }
-
-  /**
    * Fetches the aggregate denoted by <code>href</code>.
    *
    * @param href the given href.
@@ -378,93 +179,6 @@ public class Mongo {
       final Href href, final String environment, final MongoDatabase database) {
     return JsonClient.findOne(
         database.getCollection(collection(href, environment)), eq(ID, href.id));
-  }
-
-  /**
-   * Finds JSON objects that match <code>filter</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param filter the given filter.
-   * @return The object publisher.
-   * @since 1.1
-   * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, Bson)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static Publisher<JsonObject> findPublisher(
-      final MongoCollection<Document> collection, final Bson filter) {
-    return JsonClient.findPublisher(collection, filter);
-  }
-
-  /**
-   * Finds JSON objects that match <code>filter</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param filter the given filter.
-   * @param setParameters a function to set the parameters for the result set.
-   * @return The object publisher.
-   * @since 1.1
-   * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, Bson, UnaryOperator)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static Publisher<JsonObject> findPublisher(
-      final MongoCollection<Document> collection,
-      final Bson filter,
-      final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return JsonClient.findPublisher(collection, filter, setParameters);
-  }
-
-  /**
-   * Finds JSON objects that match <code>filter</code>.
-   *
-   * @param collection the MongoDB collection.
-   * @param session the MongoDB session.
-   * @param filter the given filter.
-   * @param setParameters a function to set the parameters for the result set.
-   * @return The object publisher.
-   * @since 1.1.2
-   * @deprecated Use {@link JsonClient#findPublisher(MongoCollection, ClientSession, Bson,
-   *     UnaryOperator)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static Publisher<JsonObject> findPublisher(
-      final MongoCollection<Document> collection,
-      final ClientSession session,
-      final Bson filter,
-      final UnaryOperator<FindPublisher<BsonDocument>> setParameters) {
-    return JsonClient.findPublisher(collection, session, filter, setParameters);
-  }
-
-  /**
-   * Finds a JSON object. Only one should match the <code>filter</code>, otherwise the result will
-   * be empty.
-   *
-   * @param collection the MongoDB collection.
-   * @param filter the given filter.
-   * @return The optional result.
-   * @since 1.0.2
-   * @deprecated Use {@link JsonClient#findOne(MongoCollection, Bson)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<Optional<JsonObject>> findOne(
-      final MongoCollection<Document> collection, final Bson filter) {
-    return JsonClient.findOne(collection, filter);
-  }
-
-  /**
-   * Finds a JSON object. Only one should match the <code>filter</code>, otherwise the result will
-   * be empty.
-   *
-   * @param collection the MongoDB collection.
-   * @param session the MongoDB session.
-   * @param filter the given filter.
-   * @return The optional result.
-   * @since 1.1.2
-   * @deprecated Use {@link JsonClient#findOne(MongoCollection, ClientSession, Bson)}.
-   */
-  @Deprecated(forRemoval = true)
-  public static CompletionStage<Optional<JsonObject>> findOne(
-      final MongoCollection<Document> collection, final ClientSession session, final Bson filter) {
-    return JsonClient.findOne(collection, session, filter);
   }
 
   private static boolean hrefOnly(final JsonObject json) {
