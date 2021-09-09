@@ -25,11 +25,9 @@ import static net.pincette.util.Or.tryWith;
 
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 import javax.json.JsonArray;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
-import javax.json.JsonString;
 import net.pincette.json.JsonUtil;
 
 /**
@@ -140,9 +138,13 @@ public class Command {
                     || (breakingTheGlass
                         && getBoolean(command, "/_jwt/breakingTheGlass").orElse(false))
                     || getArray(command, "/_jwt/roles")
-                        .map(Command::toStrings)
-                        .map(roles -> concat(roles, of(user)).collect(toSet()))
-                        .map(roles -> isAllowed(currentState, command, roles))
+                        .map(JsonUtil::strings)
+                        .map(
+                            roles ->
+                                isAllowed(
+                                    currentState,
+                                    command,
+                                    concat(roles, of(user)).collect(toSet())))
                         .orElse(false))
         .orElse(false);
   }
@@ -153,7 +155,7 @@ public class Command {
 
     return !allowed.isPresent()
         || allowed
-            .map(Command::toStrings)
+            .map(JsonUtil::strings)
             .map(principals -> principals.collect(toSet()))
             .map(principals -> !intersection(principals, roles).isEmpty())
             .orElse(false);
@@ -185,12 +187,5 @@ public class Command {
    */
   public static boolean isCommand(final JsonObject command, final String name) {
     return isCommand(command) && name != null && name.equals(command.getString(COMMAND));
-  }
-
-  private static Stream<String> toStrings(final JsonArray array) {
-    return array.stream()
-        .filter(JsonUtil::isString)
-        .map(JsonUtil::asString)
-        .map(JsonString::getString);
   }
 }

@@ -448,9 +448,35 @@ public class Streams {
   }
 
   public interface TopologyLifeCycle {
+    default TopologyLifeCycle andThen(final TopologyLifeCycle next) {
+      final TopologyLifeCycle original = this;
+
+      return new TopologyLifeCycle() {
+        public void started(Topology topology, String application) {
+          original.started(topology, application);
+          next.started(topology, application);
+        }
+
+        public void stopped(Topology topology, String application) {
+          original.stopped(topology, application);
+          next.stopped(topology, application);
+        }
+      };
+    }
+
     void started(Topology topology, String application);
 
     void stopped(Topology topology, String application);
+  }
+
+  public static class NopTopologyLifeCycle implements TopologyLifeCycle {
+    public void started(final Topology topology, final String application) {
+      // No operation.
+    }
+
+    public void stopped(final Topology topology, final String application) {
+      // No operation.
+    }
   }
 
   private static class Stopper implements Stop {

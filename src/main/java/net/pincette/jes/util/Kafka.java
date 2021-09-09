@@ -30,6 +30,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Predicate;
 import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
@@ -133,9 +134,9 @@ public class Kafka {
   }
 
   private static CompletionStage<Map<String, Map<TopicPartition, Long>>> getConsumerGroupOffsets(
-      final Collection<ConsumerGroupListing> groups, final Admin admin) {
+      final Stream<ConsumerGroupListing> groups, final Admin admin) {
     return composeAsyncStream(
-            groups.stream()
+            groups
                 .map(ConsumerGroupListing::groupId)
                 .map(id -> pair(id, admin.listConsumerGroupOffsets(id)))
                 .map(
@@ -193,8 +194,25 @@ public class Kafka {
    */
   public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
       final Admin admin) {
+    return messageLag(admin, g -> true);
+  }
+
+  /**
+   * Returns all the message lags for all the non-internal topics.
+   *
+   * @param admin the Kafka admin object.
+   * @param includeGroup the predicate that selects the consumer groups that should be included in
+   *     the result.
+   * @return The completion stage with the map per consumer group.
+   * @since 2.0
+   */
+  public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
+      final Admin admin, final Predicate<String> includeGroup) {
     return wrap(admin.listConsumerGroups().valid())
-        .thenComposeAsync(groups -> getConsumerGroupOffsets(groups, admin))
+        .thenComposeAsync(
+            groups ->
+                getConsumerGroupOffsets(
+                    groups.stream().filter(g -> includeGroup.test(g.groupId())), admin))
         .thenComposeAsync(
             groupOffsets ->
                 getTopicPartitionOffsets(admin)
