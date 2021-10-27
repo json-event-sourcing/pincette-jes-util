@@ -9,6 +9,7 @@ import static com.mongodb.client.model.Filters.gt;
 import static com.mongodb.client.model.Filters.ne;
 import static com.mongodb.client.model.Filters.type;
 import static com.mongodb.client.model.Sorts.ascending;
+import static com.mongodb.client.model.Sorts.descending;
 import static java.util.Optional.ofNullable;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.logging.Level.SEVERE;
@@ -36,16 +37,13 @@ import static net.pincette.json.JsonUtil.isObject;
 import static net.pincette.json.JsonUtil.toJsonPointer;
 import static net.pincette.json.Transform.transform;
 import static net.pincette.mongo.BsonUtil.fromJson;
-import static net.pincette.mongo.Collection.countDocuments;
 import static net.pincette.mongo.Collection.deleteOne;
 import static net.pincette.mongo.Collection.exec;
 import static net.pincette.mongo.Collection.insertOne;
-import static net.pincette.mongo.JsonClient.findPublisher;
+import static net.pincette.mongo.JsonClient.aggregationPublisher;
 import static net.pincette.mongo.Patch.updateOperators;
-import static net.pincette.mongo.Session.inTransaction;
 import static net.pincette.rs.Chain.with;
 import static net.pincette.rs.Reducer.reduce;
-import static net.pincette.rs.Util.join;
 import static net.pincette.rs.Util.subscribe;
 import static net.pincette.util.Collections.list;
 import static net.pincette.util.Pair.pair;
@@ -66,8 +64,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletionStage;
+import java.util.function.LongConsumer;
 import java.util.function.Supplier;
-import java.util.logging.Logger;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
 import javax.json.JsonValue;
@@ -97,11 +95,12 @@ public class Mongo {
   private static final String EVENT_ID = ID + "." + FIELD_ID;
   private static final String FIELD_SEQ = "seq";
   private static final String EVENT_SEQ = ID + "." + FIELD_SEQ;
+  private static final Bson SORT_EVENTS = sort(ascending(EVENT_SEQ));
   private static final String HREF = "href";
-  private static final Bson OLD_EVENTS = and(exists(SEQ), type(ID, STRING));
+  private static final List<Bson> OLD_EVENTS =
+      list(match(and(exists(SEQ), type(ID, STRING))), sort(descending(TIMESTAMP)));
   private static final String RESOLVED = "_resolved";
   private static final String SET = "$set";
-  private static final Bson SORT_EVENTS = sort(ascending(EVENT_SEQ));
 
   private Mongo() {}
 
@@ -131,10 +130,6 @@ public class Mongo {
     return isEvent(json) ? "-event" : tryCommand.get();
   }
 
-  private static long countOldEvents(final MongoCollection<BsonDocument> collection) {
-    return countDocuments(collection, OLD_EVENTS).toCompletableFuture().join();
-  }
-
   private static String eventCollection(final String type, final String environment) {
     return type + "-event" + suffix(environment);
   }
@@ -162,17 +157,18 @@ public class Mongo {
    *
    * @param id the identifier of the aggregate.
    * @param type the aggregate type.
-   * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
-   * @param database the database which contains the event log.
+   * @param events the database and session which contains the event log.
    * @return The aggregate instance events.
-   * @since 1.2
+   * @since 2.0
    */
   public static Publisher<JsonObject> events(
-      final String id, final String type, final String environment, final MongoDatabase database) {
+      final String id, final String type, final String environment, final DbContext events) {
     return mongoToEvents(
-        JsonClient.aggregationPublisher(
-            database.getCollection(eventCollection(type, environment)),
-            list(match(eq(EVENT_ID, id)), SORT_EVENTS)));
+        aggregationPublisher(
+            events.database.getCollection(eventCollection(type, environment)),
+            events.session,
+            list(match(eq(EVENT_ID, id)), SORT_EVENTS),
+            null));
   }
 
   /**
@@ -181,21 +177,23 @@ public class Mongo {
    *
    * @param snapshot the snapshot of th aggregate instance to start from.
    * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
-   * @param database the database which contains the event log.
+   * @param events the database and session which contains the event log.
    * @return The aggregate instance events.
-   * @since 1.2
+   * @since 2.0
    */
   public static Publisher<JsonObject> events(
-      final JsonObject snapshot, final String environment, final MongoDatabase database) {
+      final JsonObject snapshot, final String environment, final DbContext events) {
     return mongoToEvents(
-        JsonClient.aggregationPublisher(
-            database.getCollection(eventCollection(snapshot.getString(TYPE), environment)),
+        aggregationPublisher(
+            events.database.getCollection(eventCollection(snapshot.getString(TYPE), environment)),
+            events.session,
             list(
                 match(
                     and(
                         eq(EVENT_ID, snapshot.getString(ID)),
                         gt(EVENT_SEQ, snapshot.getInt(SEQ, -1)))),
-                SORT_EVENTS)));
+                SORT_EVENTS),
+            null));
   }
 
   private static CompletionStage<Map<Href, JsonObject>> fetchHrefs(
@@ -324,14 +322,13 @@ public class Mongo {
    * @param id the identifier of the aggregate.
    * @param type the aggregate type.
    * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
-   * @param database the database which contains the event log.
+   * @param events the database and session which contains the event log.
    * @return The reconstructed aggregate instance.
-   * @since 1.1
+   * @since 2.0
    */
   public static CompletionStage<JsonObject> reconstruct(
-      final String id, final String type, final String environment, final MongoDatabase database) {
-    return reduce(
-        events(id, type, environment, database), JsonUtil::emptyObject, Event::applyEvent);
+      final String id, final String type, final String environment, final DbContext events) {
+    return reduce(events(id, type, environment, events), JsonUtil::emptyObject, Event::applyEvent);
   }
 
   private static BsonDocument mongoEventKey(final JsonObject event) {
@@ -367,13 +364,13 @@ public class Mongo {
    *
    * @param snapshot the snapshot of the aggregate instance to start from.
    * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
-   * @param database the database which contains the event log.
+   * @param events the database and session which contains the event log.
    * @return The reconstructed aggregate instance.
-   * @since 1.1.2
+   * @since 2.0
    */
   public static CompletionStage<JsonObject> reconstruct(
-      final JsonObject snapshot, final String environment, final MongoDatabase database) {
-    return reduce(events(snapshot, environment, database), () -> snapshot, Event::applyEvent);
+      final JsonObject snapshot, final String environment, final DbContext events) {
+    return reduce(events(snapshot, environment, events), () -> snapshot, Event::applyEvent);
   }
 
   /**
@@ -403,37 +400,13 @@ public class Mongo {
   }
 
   private static CompletionStage<Boolean> replaceEvent(
-      final MongoCollection<BsonDocument> collection,
-      final JsonObject event,
-      final ClientSession session) {
-    return deleteOne(collection, session, eq(ID, event.getString(ID)))
+      final MongoCollection<BsonDocument> collection, final JsonObject event) {
+    return deleteOne(collection, eq(ID, event.getString(ID)))
         .thenApply(DeleteResult::wasAcknowledged)
         .thenApply(result -> must(result, r -> r))
-        .thenComposeAsync(result -> insertOne(collection, session, eventToMongo(fixId(event))))
+        .thenComposeAsync(result -> insertOne(collection, eventToMongo(fixId(event))))
         .thenApply(InsertOneResult::wasAcknowledged)
         .thenApply(result -> must(result, r -> r));
-  }
-
-  /**
-   * Restores the latest version of an aggregate in the aggregate snapshot collection using its
-   * event log.
-   *
-   * @param id the identifier of the aggregate.
-   * @param type the aggregate type.
-   * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
-   * @param database the database which contains the event log.
-   * @param session the client session this is run in.
-   * @return The reconstructed aggregate instance.
-   * @since 1.1
-   */
-  public static CompletionStage<JsonObject> restore(
-      final String id,
-      final String type,
-      final String environment,
-      final MongoDatabase database,
-      final ClientSession session) {
-    return reconstruct(id, type, environment, database)
-        .thenComposeAsync(json -> restoreReconstructed(json, environment, database, session));
   }
 
   /**
@@ -501,25 +474,50 @@ public class Mongo {
 
   /**
    * Restores the latest version of an aggregate in the aggregate snapshot collection using its
+   * event log.
+   *
+   * @param id the identifier of the aggregate.
+   * @param type the aggregate type.
+   * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
+   * @param aggregates the database and session which contains the aggregate instances.
+   * @param events the database and session which contains the event log.
+   * @return The reconstructed aggregate instance.
+   * @since 2.0
+   */
+  public static CompletionStage<JsonObject> restore(
+      final String id,
+      final String type,
+      final String environment,
+      final DbContext aggregates,
+      final DbContext events) {
+    return reconstruct(id, type, environment, events)
+        .thenComposeAsync(
+            json ->
+                restoreReconstructed(json, environment, aggregates.database, aggregates.session));
+  }
+
+  /**
+   * Restores the latest version of an aggregate in the aggregate snapshot collection using its
    * event log. If the snapshot is already the latest version then nothing is updated.
    *
    * @param snapshot the snapshot of th aggregate instance to start from.
    * @param environment the environment in which this is run, e.g. "dev", "prd", etc.
-   * @param database the database which contains the event log.
-   * @param session the client session in which this is run.
+   * @param aggregates the database and session which contains the aggregate instances.
+   * @param events the database and session which contains the event log.
    * @return The reconstructed aggregate instance.
-   * @since 1.1.2
+   * @since 2.0
    */
   public static CompletionStage<JsonObject> restore(
       final JsonObject snapshot,
       final String environment,
-      final MongoDatabase database,
-      final ClientSession session) {
-    return reconstruct(snapshot, environment, database)
+      final DbContext aggregates,
+      final DbContext events) {
+    return reconstruct(snapshot, environment, events)
         .thenComposeAsync(
             json ->
                 json.getInt(SEQ) > snapshot.getInt(SEQ)
-                    ? restoreReconstructed(json, environment, database, session)
+                    ? restoreReconstructed(
+                        json, environment, aggregates.database, aggregates.session)
                     : completedFuture(snapshot));
   }
 
@@ -672,6 +670,23 @@ public class Mongo {
    * @param collection the aggregate collection.
    * @param currentState the current state of the aggregate instance that is about to be changed.
    * @param event the event with the operations.
+   * @return Whether the update was successful or not.
+   * @since 2.0
+   */
+  public static CompletionStage<Boolean> updateAggregate(
+      final MongoCollection<Document> collection,
+      final JsonObject currentState,
+      final JsonObject event) {
+    return updateAggregate(collection, currentState, event, null);
+  }
+
+  /**
+   * This updates an aggregate instance with the smallest number of changes using the operations in
+   * the event.
+   *
+   * @param collection the aggregate collection.
+   * @param currentState the current state of the aggregate instance that is about to be changed.
+   * @param event the event with the operations.
    * @param session the client session this runs in.
    * @return Whether the update was successful or not.
    * @since 1.3.11
@@ -682,22 +697,24 @@ public class Mongo {
       final JsonObject event,
       final ClientSession session) {
     final Bson filter = eq(ID, currentState.getString(ID));
+    final List<UpdateOneModel<Document>> operators =
+        concat(
+                Stream.of(technicalUpdateOperator(event)),
+                updateOperators(
+                    currentState,
+                    event.getJsonArray(OPS).stream()
+                        .filter(JsonUtil::isObject)
+                        .map(JsonValue::asJsonObject)))
+            .map(op -> new UpdateOneModel<Document>(filter, fromJson(op)))
+            .collect(toList());
+    final BulkWriteOptions options = new BulkWriteOptions().ordered(true);
 
     return exec(
             collection,
             c ->
-                c.bulkWrite(
-                    session,
-                    concat(
-                            Stream.of(technicalUpdateOperator(event)),
-                            updateOperators(
-                                currentState,
-                                event.getJsonArray(OPS).stream()
-                                    .filter(JsonUtil::isObject)
-                                    .map(JsonValue::asJsonObject)))
-                        .map(op -> new UpdateOneModel<Document>(filter, fromJson(op)))
-                        .collect(toList()),
-                    new BulkWriteOptions().ordered(true)))
+                session != null
+                    ? c.bulkWrite(session, operators, options)
+                    : c.bulkWrite(operators, options))
         .thenApply(BulkWriteResult::wasAcknowledged)
         .thenApply(result -> must(result, r -> r));
   }
@@ -709,47 +726,42 @@ public class Mongo {
    * @param environment the environment in which the aggregate lives, e.g. test, acceptance,
    *     production, etc. This is added as a suffix to the collection name.
    * @param database the MongoDB database.
-   * @param session the MongoDB client session, which is used for transactions.
-   * @param logger the logger to which progress is written. It may be <code>null</code>.
+   * @param progress the function to which the current processed event count is given. It may be
+   *     <code>null</code>.
    * @since 2.0
    */
-  public static void upgradeEventLog(
+  public static CompletionStage<Boolean> upgradeEventLog(
       final String type,
       final String environment,
       final MongoDatabase database,
-      final ClientSession session,
-      final Logger logger) {
+      final LongConsumer progress) {
     final MongoCollection<BsonDocument> collection =
         database.getCollection(eventCollection(type, environment), BsonDocument.class);
     final State<Long> count = new State<>(0L);
 
-    if (logger != null) {
-      logger.info(
-          () -> "Upgrading " + countOldEvents(collection) + " events for type " + type + ".");
-    }
-
-    join(
-        with(findPublisher(database.getCollection(eventCollection(type, environment)), OLD_EVENTS))
-            .map(
-                event -> {
-                  if (logger != null && count.set(count.get() + 1) % 10000 == 0) {
-                    logger.info(() -> "Processed " + count.get() + " events.");
-                  }
-                  return event;
-                })
-            .mapAsync(
-                event ->
-                    inTransaction(s -> replaceEvent(collection, event, s), session)
-                        .exceptionally(
-                            e -> {
-                              getGlobal().log(SEVERE, e.getMessage(), e);
-                              return false;
-                            }))
-            .get());
-
-    if (logger != null) {
-      logger.info(() -> "Done upgrading events for type " + type + ".");
-    }
+    return reduce(
+            with(aggregationPublisher(
+                    database.getCollection(eventCollection(type, environment)), OLD_EVENTS))
+                .per(1000)
+                .map(
+                    events -> {
+                      if (progress != null) {
+                        progress.accept(count.set(count.get() + events.size()));
+                      }
+                      return events;
+                    })
+                .mapAsync(
+                    events ->
+                        composeAsyncStream(events.stream().map(ev -> replaceEvent(collection, ev)))
+                            .thenApply(results -> results.reduce(true, (r1, r2) -> r1 && r2))
+                            .exceptionally(
+                                e -> {
+                                  getGlobal().log(SEVERE, e.getMessage(), e);
+                                  return false;
+                                }))
+                .get(),
+            (r1, r2) -> r1 && r2)
+        .thenApply(result -> result.orElse(true));
   }
 
   /**
@@ -769,5 +781,15 @@ public class Mongo {
         resolve(list(command, state), environment, database)
             .thenComposeAsync(resolved -> reducer.apply(resolved.get(0), resolved.get(1)))
             .thenApply(Mongo::unresolve);
+  }
+
+  public static class DbContext {
+    final MongoDatabase database;
+    final ClientSession session;
+
+    public DbContext(final MongoDatabase database, final ClientSession session) {
+      this.database = database;
+      this.session = session;
+    }
   }
 }
