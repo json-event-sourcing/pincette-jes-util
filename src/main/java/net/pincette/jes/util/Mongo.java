@@ -18,17 +18,17 @@ import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Stream.concat;
-import static net.pincette.jes.util.Command.isCommand;
-import static net.pincette.jes.util.Event.applyEvent;
-import static net.pincette.jes.util.Event.isEvent;
-import static net.pincette.jes.util.JsonFields.CORR;
-import static net.pincette.jes.util.JsonFields.DELETED;
-import static net.pincette.jes.util.JsonFields.ID;
-import static net.pincette.jes.util.JsonFields.OPS;
-import static net.pincette.jes.util.JsonFields.SEQ;
-import static net.pincette.jes.util.JsonFields.TIMESTAMP;
-import static net.pincette.jes.util.JsonFields.TYPE;
-import static net.pincette.jes.util.Util.isManagedObject;
+import static net.pincette.jes.Command.isCommand;
+import static net.pincette.jes.Event.applyEvent;
+import static net.pincette.jes.Event.isEvent;
+import static net.pincette.jes.JsonFields.CORR;
+import static net.pincette.jes.JsonFields.DELETED;
+import static net.pincette.jes.JsonFields.ID;
+import static net.pincette.jes.JsonFields.OPS;
+import static net.pincette.jes.JsonFields.SEQ;
+import static net.pincette.jes.JsonFields.TIMESTAMP;
+import static net.pincette.jes.JsonFields.TYPE;
+import static net.pincette.jes.Util.isManagedObject;
 import static net.pincette.json.JsonUtil.add;
 import static net.pincette.json.JsonUtil.copy;
 import static net.pincette.json.JsonUtil.createObjectBuilder;
@@ -64,11 +64,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Flow.Publisher;
 import java.util.function.LongConsumer;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
 import javax.json.JsonValue;
+import net.pincette.jes.Event;
+import net.pincette.jes.Reducer;
 import net.pincette.json.JsonUtil;
 import net.pincette.json.Transform.JsonEntry;
 import net.pincette.json.Transform.Transformer;
@@ -81,7 +84,6 @@ import org.bson.BsonInt32;
 import org.bson.BsonString;
 import org.bson.Document;
 import org.bson.conversions.Bson;
-import org.reactivestreams.Publisher;
 
 /**
  * MongoDB utilities.
@@ -396,7 +398,7 @@ public class Mongo {
    */
   public static Publisher<JsonObject> reconstructionPublisher(
       final Publisher<JsonObject> events, final JsonObject snapshot) {
-    return subscribe(events, new Mapper<>(applyEvent(snapshot)));
+    return subscribe(events, new Mapper<>(event -> applyEvent(snapshot, event)));
   }
 
   private static CompletionStage<Boolean> replaceEvent(

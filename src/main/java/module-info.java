@@ -7,12 +7,11 @@ module net.pincette.jes.util {
   requires org.mongodb.bson;
   requires org.mongodb.driver.core;
   requires net.pincette.rs;
-  requires com.fasterxml.jackson.dataformat.cbor;
   requires kafka.clients;
   requires java.logging;
-  requires async.http.client;
-  requires kafka.streams;
   requires typesafe.config;
   requires org.reactivestreams;
+  requires net.pincette.jes;
+
   exports net.pincette.jes.util;
 }

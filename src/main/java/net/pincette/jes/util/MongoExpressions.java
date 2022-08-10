@@ -32,6 +32,7 @@ import javax.json.JsonObject;
 import javax.json.JsonString;
 import javax.json.JsonStructure;
 import javax.json.JsonValue;
+import net.pincette.jes.Event;
 import net.pincette.json.JsonUtil;
 import net.pincette.mongo.Features;
 import net.pincette.mongo.Implementation;

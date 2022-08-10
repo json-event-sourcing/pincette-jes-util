@@ -1,15 +1,16 @@
 package net.pincette.jes.util;
 
 import static java.util.concurrent.CompletableFuture.completedFuture;
-import static net.pincette.jes.util.JsonFields.ERROR;
-import static net.pincette.jes.util.JsonFields.ERRORS;
-import static net.pincette.jes.util.JsonFields.STATE;
+import static net.pincette.jes.JsonFields.ERROR;
+import static net.pincette.jes.JsonFields.ERRORS;
+import static net.pincette.jes.JsonFields.STATE;
 import static net.pincette.json.JsonUtil.createObjectBuilder;
 
 import java.util.Optional;
 import java.util.function.Function;
 import javax.json.JsonArray;
 import javax.json.JsonObject;
+import net.pincette.jes.Reducer;
 import net.pincette.mongo.Validator;
 
 public class Validation {

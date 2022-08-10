@@ -9,7 +9,6 @@ import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
-import static net.pincette.jes.util.JsonFields.CORR;
 import static net.pincette.json.JsonUtil.createObjectBuilder;
 import static net.pincette.json.JsonUtil.from;
 import static net.pincette.util.Collections.map;
@@ -19,10 +18,8 @@ import static net.pincette.util.Collections.union;
 import static net.pincette.util.Pair.pair;
 import static net.pincette.util.StreamUtil.composeAsyncStream;
 import static org.apache.kafka.clients.producer.ProducerConfig.configNames;
-import static org.apache.kafka.streams.kstream.JoinWindows.of;
 
 import com.typesafe.config.Config;
-import java.time.Duration;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -34,7 +31,6 @@ import java.util.function.Predicate;
 import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
-import net.pincette.util.Pair;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.ConsumerGroupListing;
 import org.apache.kafka.clients.admin.ListOffsetsResult.ListOffsetsResultInfo;
@@ -45,11 +41,8 @@ import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.Serializer;
-import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.kstream.KStream;
 
 /**
  * Some Kafka utilities.
@@ -70,23 +63,6 @@ public class Kafka {
               pair("max.in.flight.requests.per.connection", 1)));
 
   private Kafka() {}
-
-  /**
-   * Joins two streams on the <code>_corr</code> field. The result is keyed on that field, with the
-   * values of both streams paired.
-   *
-   * @param stream1 the first stream.
-   * @param stream2 the second stream.
-   * @param window the join window.
-   * @return The joined stream of pairs.
-   * @since 1.1.4
-   */
-  public static KStream<String, Pair<JsonObject, JsonObject>> correlate(
-      final KStream<String, JsonObject> stream1,
-      final KStream<String, JsonObject> stream2,
-      final Duration window) {
-    return toCorr(stream1).join(toCorr(stream2), Pair::pair, of(window));
-  }
 
   /**
    * This creates a fail fast Kafka producer that demands full acknowledgement of sent messages.
@@ -143,30 +119,33 @@ public class Kafka {
                     pair ->
                         pair.second
                             .partitionsToOffsetAndMetadata()
+                            .toCompletionStage()
                             .thenApply(
                                 offsets ->
-                                    pair(pair.first, toLong(offsets, OffsetAndMetadata::offset))))
-                .map(Kafka::wrap))
+                                    pair(pair.first, toLong(offsets, OffsetAndMetadata::offset)))))
         .thenApply(pairs -> pairs.collect(toMap(p -> p.first, p -> p.second)));
   }
 
   private static CompletionStage<Collection<TopicPartition>> getTopicPartitions(final Admin admin) {
-    return wrap(admin.listTopics().listings())
+    return admin
+        .listTopics()
+        .listings()
+        .toCompletionStage()
         .thenApply(Kafka::nonInternal)
         .thenComposeAsync(
             names ->
-                wrap(
-                    admin
-                        .describeTopics(names)
-                        .all()
-                        .thenApply(topics -> toPartitions(topics.values()))));
+                admin
+                    .describeTopics(names)
+                    .allTopicNames()
+                    .toCompletionStage()
+                    .thenApply(topics -> toPartitions(topics.values())));
   }
 
   private static CompletionStage<Map<TopicPartition, Long>> getTopicPartitionOffsets(
       final Admin admin) {
     return getTopicPartitions(admin)
         .thenApply(Kafka::latest)
-        .thenComposeAsync(latest -> wrap(admin.listOffsets(latest).all()))
+        .thenComposeAsync(latest -> admin.listOffsets(latest).all().toCompletionStage())
         .thenApply(offsets -> toLong(offsets, ListOffsetsResultInfo::offset));
   }
 
@@ -208,7 +187,10 @@ public class Kafka {
    */
   public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
       final Admin admin, final Predicate<String> includeGroup) {
-    return wrap(admin.listConsumerGroups().valid())
+    return admin
+        .listConsumerGroups()
+        .valid()
+        .toCompletionStage()
         .thenComposeAsync(
             groups ->
                 getConsumerGroupOffsets(
@@ -282,12 +264,6 @@ public class Kafka {
     return completableFuture;
   }
 
-  private static KStream<String, JsonObject> toCorr(final KStream<String, JsonObject> stream) {
-    return stream
-        .filter((k, v) -> v.containsKey(CORR))
-        .map((k, v) -> new KeyValue<>(v.getString(CORR).toLowerCase(), v));
-  }
-
   /**
    * Converts a message lag map to JSON.
    *
@@ -324,29 +300,5 @@ public class Kafka {
     return topics.stream()
         .flatMap(t -> t.partitions().stream().map(p -> new TopicPartition(t.name(), p.partition())))
         .collect(toList());
-  }
-
-  /**
-   * Wraps a <code>KafkaFuture</code> in a <code>CompletionStage</code>, which will complete when
-   * the future completes.
-   *
-   * @param future the given Kafka future.
-   * @param <T> the value type.
-   * @return The completion stage that is wrapped around the Kafka future.
-   * @since 1.4
-   */
-  public static <T> CompletionStage<T> wrap(final KafkaFuture<T> future) {
-    final CompletableFuture<T> result = new CompletableFuture<>();
-
-    future.whenComplete(
-        (v, e) -> {
-          if (e != null) {
-            result.completeExceptionally(e);
-          } else {
-            result.complete(v);
-          }
-        });
-
-    return result;
   }
 }
