@@ -9,6 +9,7 @@ import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+import static java.util.stream.Collectors.toSet;
 import static net.pincette.json.JsonUtil.createObjectBuilder;
 import static net.pincette.json.JsonUtil.from;
 import static net.pincette.util.Collections.map;
@@ -16,8 +17,7 @@ import static net.pincette.util.Collections.merge;
 import static net.pincette.util.Collections.set;
 import static net.pincette.util.Collections.union;
 import static net.pincette.util.Pair.pair;
-import static net.pincette.util.StreamUtil.composeAsyncStream;
-import static org.apache.kafka.clients.producer.ProducerConfig.configNames;
+import static org.apache.kafka.clients.admin.AdminClientConfig.configNames;
 
 import com.typesafe.config.Config;
 import java.util.Collection;
@@ -28,11 +28,13 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.ConsumerGroupListing;
+import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsSpec;
 import org.apache.kafka.clients.admin.ListOffsetsResult.ListOffsetsResultInfo;
 import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.admin.OffsetSpec.LatestSpec;
@@ -47,10 +49,14 @@ import org.apache.kafka.common.serialization.Serializer;
 /**
  * Some Kafka utilities.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.0
  */
 public class Kafka {
+  private static final Set<String> KAFKA_ADMIN_CONFIG_NAMES =
+      union(
+          configNames(),
+          set("ssl.endpoint.identification.algorithm", "sasl.mechanism", "sasl.jaas.config"));
   private static final String KAFKA_PREFIX = "KAFKA_";
   private static final Map<String, Object> RELIABLE_PRODUCER_CONFIG =
       unmodifiableMap(
@@ -63,6 +69,39 @@ public class Kafka {
               pair("max.in.flight.requests.per.connection", 1)));
 
   private Kafka() {}
+
+  /**
+   * Returns a new config with only admin properties.
+   *
+   * @param config the given config.
+   * @return The new config.
+   * @since 3.1
+   */
+  public static Map<String, Object> adminConfig(final Map<String, Object> config) {
+    return config.entrySet().stream()
+        .filter(e -> KAFKA_ADMIN_CONFIG_NAMES.contains(e.getKey()))
+        .collect(toMap(Entry::getKey, Entry::getValue));
+  }
+
+  private static CompletionStage<Map<String, Map<TopicPartition, Long>>> consumerGroupOffsets(
+      final Stream<ConsumerGroupListing> groups,
+      final Collection<TopicPartition> partitions,
+      final Admin admin) {
+    return admin
+        .listConsumerGroupOffsets(groupOffsetSpecs(groups, partitions))
+        .all()
+        .thenApply(
+            offsets ->
+                offsets.entrySet().stream()
+                    .collect(
+                        toMap(Entry::getKey, e -> toLong(e.getValue(), OffsetAndMetadata::offset))))
+        .toCompletionStage();
+  }
+
+  private static CompletionStage<Collection<ConsumerGroupListing>> consumerGroups(
+      final Admin admin) {
+    return admin.listConsumerGroups().valid().toCompletionStage();
+  }
 
   /**
    * This creates a fail fast Kafka producer that demands full acknowledgement of sent messages.
@@ -85,6 +124,19 @@ public class Kafka {
   }
 
   /**
+   * Flattens the tree under <code>config</code> so that the keys in the resulting map are
+   * dot-separated paths as Kafka expects it.
+   *
+   * @param config the given configuration object.
+   * @return The Kafka configuration.
+   * @since 3.1
+   */
+  public static Map<String, Object> fromConfig(final Config config) {
+    return config.entrySet().stream()
+        .collect(toMap(Map.Entry::getKey, e -> e.getValue().unwrapped()));
+  }
+
+  /**
    * Gets the configuration object at <code>path</code> in <code>config</code> and flattens the tree
    * under it so that the keys in the resulting map are dot-separated paths as Kafka expects it.
    *
@@ -94,8 +146,7 @@ public class Kafka {
    * @since 1.0
    */
   public static Map<String, Object> fromConfig(final Config config, final String path) {
-    return config.getConfig(path).entrySet().stream()
-        .collect(toMap(Map.Entry::getKey, e -> e.getValue().unwrapped()));
+    return fromConfig(config.getConfig(path));
   }
 
   /**
@@ -109,44 +160,12 @@ public class Kafka {
     return kafkaEnv().collect(toMap(e -> kafkaProperty(e.getKey()), Entry::getValue));
   }
 
-  private static CompletionStage<Map<String, Map<TopicPartition, Long>>> getConsumerGroupOffsets(
-      final Stream<ConsumerGroupListing> groups, final Admin admin) {
-    return composeAsyncStream(
-            groups
-                .map(ConsumerGroupListing::groupId)
-                .map(id -> pair(id, admin.listConsumerGroupOffsets(id)))
-                .map(
-                    pair ->
-                        pair.second
-                            .partitionsToOffsetAndMetadata()
-                            .toCompletionStage()
-                            .thenApply(
-                                offsets ->
-                                    pair(pair.first, toLong(offsets, OffsetAndMetadata::offset)))))
-        .thenApply(pairs -> pairs.collect(toMap(p -> p.first, p -> p.second)));
-  }
-
-  private static CompletionStage<Collection<TopicPartition>> getTopicPartitions(final Admin admin) {
-    return admin
-        .listTopics()
-        .listings()
-        .toCompletionStage()
-        .thenApply(Kafka::nonInternal)
-        .thenComposeAsync(
-            names ->
-                admin
-                    .describeTopics(names)
-                    .allTopicNames()
-                    .toCompletionStage()
-                    .thenApply(topics -> toPartitions(topics.values())));
-  }
-
-  private static CompletionStage<Map<TopicPartition, Long>> getTopicPartitionOffsets(
-      final Admin admin) {
-    return getTopicPartitions(admin)
-        .thenApply(Kafka::latest)
-        .thenComposeAsync(latest -> admin.listOffsets(latest).all().toCompletionStage())
-        .thenApply(offsets -> toLong(offsets, ListOffsetsResultInfo::offset));
+  private static Map<String, ListConsumerGroupOffsetsSpec> groupOffsetSpecs(
+      final Stream<ConsumerGroupListing> groups, final Collection<TopicPartition> partitions) {
+    return groups.collect(
+        toMap(
+            ConsumerGroupListing::groupId,
+            g -> new ListConsumerGroupOffsetsSpec().topicPartitions(partitions)));
   }
 
   private static Stream<Entry<String, String>> kafkaEnv() {
@@ -177,6 +196,19 @@ public class Kafka {
   }
 
   /**
+   * Returns all the message lags for the given topic.
+   *
+   * @param topic the given topic.
+   * @param admin the Kafka admin object.
+   * @return The completion stage with the map per consumer group.
+   * @since 3.1
+   */
+  public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
+      final String topic, final Admin admin) {
+    return messageLag(topic, admin, g -> true);
+  }
+
+  /**
    * Returns all the message lags for all the non-internal topics.
    *
    * @param admin the Kafka admin object.
@@ -187,17 +219,49 @@ public class Kafka {
    */
   public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
       final Admin admin, final Predicate<String> includeGroup) {
-    return admin
-        .listConsumerGroups()
-        .valid()
-        .toCompletionStage()
+    return messageLag(
+        () -> topicPartitions(admin), () -> topicPartitionOffsets(admin), admin, includeGroup);
+  }
+
+  /**
+   * Returns all the message lags for the given topic.
+   *
+   * @param topic the given topic.
+   * @param admin the Kafka admin object.
+   * @param includeGroup the predicate that selects the consumer groups that should be included in
+   *     the result.
+   * @return The completion stage with the map per consumer group.
+   * @since 3.1
+   */
+  public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
+      final String topic, final Admin admin, final Predicate<String> includeGroup) {
+    return messageLag(
+        () -> topicPartitions(topic, admin),
+        () -> topicPartitionOffsets(topic, admin),
+        admin,
+        includeGroup);
+  }
+
+  private static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
+      final Supplier<CompletionStage<Collection<TopicPartition>>> getPartitions,
+      final Supplier<CompletionStage<Map<TopicPartition, Long>>> getPartitionOffsets,
+      final Admin admin,
+      final Predicate<String> includeGroup) {
+    return consumerGroups(admin)
         .thenComposeAsync(
             groups ->
-                getConsumerGroupOffsets(
-                    groups.stream().filter(g -> includeGroup.test(g.groupId())), admin))
+                getPartitions
+                    .get()
+                    .thenComposeAsync(
+                        partitions ->
+                            consumerGroupOffsets(
+                                groups.stream().filter(g -> includeGroup.test(g.groupId())),
+                                partitions,
+                                admin)))
         .thenComposeAsync(
             groupOffsets ->
-                getTopicPartitionOffsets(admin)
+                getPartitionOffsets
+                    .get()
                     .thenApply(
                         partitionOffsets -> messageLagPerGroup(groupOffsets, partitionOffsets)));
   }
@@ -222,8 +286,8 @@ public class Kafka {
         .collect(toMap(pair -> pair.first, pair -> pair.second));
   }
 
-  private static Collection<String> nonInternal(final Collection<TopicListing> topics) {
-    return topics.stream().filter(t -> !t.isInternal()).map(TopicListing::name).collect(toList());
+  private static Set<String> nonInternal(final Collection<TopicListing> topics) {
+    return topics.stream().filter(t -> !t.isInternal()).map(TopicListing::name).collect(toSet());
   }
 
   private static Map<String, Object> producerConfig(final Map<String, Object> config) {
@@ -292,13 +356,95 @@ public class Kafka {
   private static <T> Map<TopicPartition, Long> toLong(
       final Map<TopicPartition, T> offsets, final ToLongFunction<T> fn) {
     return offsets.entrySet().stream()
+        .filter(e -> e.getValue() != null)
         .collect(toMap(Entry::getKey, e -> fn.applyAsLong(e.getValue())));
   }
 
-  private static Collection<TopicPartition> toPartitions(
-      final Collection<TopicDescription> topics) {
+  /**
+   * Converts topic descriptions to topic partitions.
+   *
+   * @param topics the given topic descriptions.
+   * @return The topic partitions.
+   * @since 3.1
+   */
+  public static Collection<TopicPartition> toPartitions(final Collection<TopicDescription> topics) {
     return topics.stream()
         .flatMap(t -> t.partitions().stream().map(p -> new TopicPartition(t.name(), p.partition())))
         .collect(toList());
+  }
+
+  private static CompletionStage<Map<TopicPartition, Long>> topicPartitionOffsets(
+      final Admin admin) {
+    return topicPartitionOffsets(() -> topicPartitions(admin), admin);
+  }
+
+  private static CompletionStage<Map<TopicPartition, Long>> topicPartitionOffsets(
+      final String topic, final Admin admin) {
+    return topicPartitionOffsets(() -> topicPartitions(topic, admin), admin);
+  }
+
+  private static CompletionStage<Map<TopicPartition, Long>> topicPartitionOffsets(
+      final Supplier<CompletionStage<Collection<TopicPartition>>> getPartitions,
+      final Admin admin) {
+    return getPartitions
+        .get()
+        .thenComposeAsync(partitions -> topicPartitionOffsets(partitions, admin));
+  }
+
+  private static CompletionStage<Map<TopicPartition, Long>> topicPartitionOffsets(
+      final Collection<TopicPartition> partitions, final Admin admin) {
+    return admin
+        .listOffsets(latest(partitions))
+        .all()
+        .toCompletionStage()
+        .thenApply(offsets -> toLong(offsets, ListOffsetsResultInfo::offset));
+  }
+
+  /**
+   * Returns the topic partitions of a topic.
+   *
+   * @param topic the given topic.
+   * @param admin the admin API.
+   * @return The collection of topic partitions.
+   * @since 3.1
+   */
+  public static CompletionStage<Collection<TopicPartition>> topicPartitions(
+      final String topic, final Admin admin) {
+    return topicPartitions(set(topic), admin);
+  }
+
+  /**
+   * Returns all non-internal topics.
+   *
+   * @param admin the admin API.
+   * @return The collection of topic partitions.
+   * @since 3.1
+   */
+  public static CompletionStage<Collection<TopicPartition>> topicPartitions(final Admin admin) {
+    return topics(admin)
+        .thenApply(Kafka::nonInternal)
+        .thenComposeAsync(names -> topicPartitions(names, admin));
+  }
+
+  /**
+   * Returns the topic partitions of a set of topics.
+   *
+   * @param topics the given topics.
+   * @param admin the admin API.
+   * @return The collection of topic partitions.
+   * @since 3.1
+   */
+  public static CompletionStage<Collection<TopicPartition>> topicPartitions(
+      final Set<String> topics, final Admin admin) {
+    return admin
+        .describeTopics(topics)
+        .allTopicNames()
+        .toCompletionStage()
+        .thenApply(Map::values)
+        .thenApply(Kafka::toPartitions);
+  }
+
+  private static CompletionStage<Collection<TopicListing>> topics(final Admin admin) {
+    return admin.listTopics().listings().toCompletionStage();
   }
 }
