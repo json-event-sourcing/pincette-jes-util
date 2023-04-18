@@ -58,8 +58,8 @@ public class Configuration {
   public static Config loadDefault() {
     return tryWith(Configuration::asFile)
         .or(Configuration::asResource)
-        .or(Configuration::asSystemResource)
         .or(Configuration::defaultConfig)
+        .or(Configuration::asSystemResource)
         .get()
         .orElseGet(ConfigFactory::load);
   }
