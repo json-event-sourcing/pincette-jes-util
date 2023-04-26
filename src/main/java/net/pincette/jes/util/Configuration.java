@@ -1,16 +1,16 @@
 package net.pincette.jes.util;
 
-import static com.typesafe.config.ConfigFactory.parseFile;
-import static com.typesafe.config.ConfigFactory.parseResources;
+import static com.typesafe.config.ConfigFactory.parseReader;
 import static java.lang.System.getProperty;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Optional.ofNullable;
 import static net.pincette.util.Or.tryWith;
-import static net.pincette.util.Util.tryToGetRethrow;
-import static net.pincette.util.Util.tryToGetSilent;
 
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.util.Optional;
 
 /**
  * Some configuration utilities.
@@ -23,23 +23,30 @@ public class Configuration {
 
   private static Config asFile() {
     return ofNullable(getProperty("config.file"))
-        .flatMap(file -> tryToGetRethrow(() -> parseFile(new File(file))))
+        .map(File::new)
+        .filter(File::canRead)
+        .map(ConfigFactory::parseFile)
         .orElse(null);
   }
 
   private static Config asResource() {
     return ofNullable(getProperty("config.resource"))
-        .flatMap(resource -> tryToGetRethrow(() -> parseFile(new File(new File("conf"), resource))))
+        .map(resource -> new File(new File("conf"), resource))
+        .filter(File::canRead)
+        .map(ConfigFactory::parseFile)
         .orElse(null);
   }
 
   private static Config asSystemResource() {
-    return tryToGetSilent(() -> parseResources(Configuration.class, "/conf/application.conf"))
+    return ofNullable(Configuration.class.getResourceAsStream("/conf/application.conf"))
+        .map(in -> parseReader(new InputStreamReader(in, UTF_8)))
         .orElse(null);
   }
 
   private static Config defaultConfig() {
-    return tryToGetSilent(() -> parseFile(new File(new File("conf"), "application.conf")))
+    return Optional.of(new File(new File("conf"), "application.conf"))
+        .filter(File::canRead)
+        .map(ConfigFactory::parseFile)
         .orElse(null);
   }
 
