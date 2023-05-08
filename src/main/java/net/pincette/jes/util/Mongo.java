@@ -30,12 +30,13 @@ import static net.pincette.jes.JsonFields.TIMESTAMP;
 import static net.pincette.jes.JsonFields.TYPE;
 import static net.pincette.jes.Util.isManagedObject;
 import static net.pincette.json.JsonUtil.add;
-import static net.pincette.json.JsonUtil.copy;
+import static net.pincette.json.JsonUtil.createArrayBuilder;
 import static net.pincette.json.JsonUtil.createObjectBuilder;
 import static net.pincette.json.JsonUtil.emptyObject;
 import static net.pincette.json.JsonUtil.isObject;
+import static net.pincette.json.JsonUtil.isStructure;
+import static net.pincette.json.JsonUtil.objectValue;
 import static net.pincette.json.JsonUtil.toJsonPointer;
-import static net.pincette.json.Transform.transform;
 import static net.pincette.mongo.BsonUtil.fromJson;
 import static net.pincette.mongo.Collection.deleteOne;
 import static net.pincette.mongo.Collection.exec;
@@ -66,15 +67,17 @@ import java.util.Set;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Flow.Publisher;
 import java.util.function.LongConsumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
+import javax.json.JsonArrayBuilder;
 import javax.json.JsonObject;
+import javax.json.JsonStructure;
 import javax.json.JsonValue;
 import net.pincette.jes.Event;
 import net.pincette.jes.Reducer;
 import net.pincette.json.JsonUtil;
-import net.pincette.json.Transform.JsonEntry;
-import net.pincette.json.Transform.Transformer;
 import net.pincette.mongo.JsonClient;
 import net.pincette.rs.Mapper;
 import net.pincette.util.State;
@@ -453,25 +456,14 @@ public class Mongo {
 
   private static JsonObject resolve(
       final JsonObject json, final Map<Href, JsonObject> fetchedHrefs) {
-    return transform(
-        json,
-        new Transformer(
-            entry -> isObject(entry.value) && hrefOnly(entry.value.asJsonObject()),
-            entry -> Optional.of(resolve(entry, fetchedHrefs))));
+    return transformHref(json, Mongo::hrefOnly, j -> resolveHref(j, fetchedHrefs));
   }
 
-  private static JsonEntry resolve(
-      final JsonEntry entry, final Map<Href, JsonObject> fetchedHrefs) {
-    return new JsonEntry(
-        entry.path,
-        ofNullable(fetchedHrefs.get(new Href(entry.value.asJsonObject().getString(HREF))))
-            .map(
-                fetched ->
-                    add(
-                            createObjectBuilder(entry.value.asJsonObject()).add(RESOLVED, true),
-                            fetched)
-                        .build())
-            .orElse(entry.value.asJsonObject()));
+  private static JsonObject resolveHref(
+      final JsonObject json, final Map<Href, JsonObject> fetchedHrefs) {
+    return ofNullable(fetchedHrefs.get(new Href(json.getString(HREF))))
+        .map(fetched -> add(createObjectBuilder(json).add(RESOLVED, true), fetched).build())
+        .orElse(json);
   }
 
   /**
@@ -558,6 +550,38 @@ public class Mongo {
         .build();
   }
 
+  private static JsonObject transformHref(
+      final JsonObject json,
+      final Predicate<JsonObject> condition,
+      final UnaryOperator<JsonObject> transform) {
+    return json.entrySet().stream()
+        .map(e -> pair(e.getKey(), e.getValue()))
+        .map(
+            pair ->
+                isStructure(pair.second)
+                    ? pair(
+                        pair.first,
+                        transformHref((JsonStructure) pair.second, condition, transform))
+                    : pair)
+        .reduce(createObjectBuilder(), (b, pair) -> b.add(pair.first, pair.second), (b1, b2) -> b1)
+        .build();
+  }
+
+  private static JsonStructure transformHref(
+      final JsonStructure json,
+      final Predicate<JsonObject> condition,
+      final UnaryOperator<JsonObject> transform) {
+    final UnaryOperator<JsonValue> tryStructure =
+        v -> isStructure(v) ? transformHref((JsonStructure) v, condition, transform) : v;
+
+    return isObject(json)
+        ? objectValue(json).filter(condition).map(transform).orElseGet(json::asJsonObject)
+        : json.asJsonArray().stream()
+            .map(tryStructure)
+            .reduce(createArrayBuilder(), JsonArrayBuilder::add, (b1, b2) -> b1)
+            .build();
+  }
+
   /**
    * This removes the additions made by the <code>resolve</code> method.
    *
@@ -566,19 +590,10 @@ public class Mongo {
    * @since 1.1.3
    */
   public static JsonObject unresolve(final JsonObject aggregate) {
-    return transform(
+    return transformHref(
         aggregate,
-        new Transformer(
-            entry -> isObject(entry.value) && entry.value.asJsonObject().containsKey(RESOLVED),
-            entry ->
-                Optional.of(
-                    new JsonEntry(
-                        entry.path,
-                        copy(
-                                entry.value.asJsonObject(),
-                                createObjectBuilder(),
-                                key -> key.equals(HREF))
-                            .build()))));
+        json -> json.containsKey(RESOLVED),
+        json -> createObjectBuilder().add(HREF, json.getString(HREF)).build());
   }
 
   /**
