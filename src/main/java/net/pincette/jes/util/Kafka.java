@@ -3,8 +3,10 @@ package net.pincette.jes.util;
 import static java.lang.String.valueOf;
 import static java.lang.System.getenv;
 import static java.util.Arrays.stream;
+import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Optional.ofNullable;
+import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
@@ -17,6 +19,7 @@ import static net.pincette.util.Collections.merge;
 import static net.pincette.util.Collections.set;
 import static net.pincette.util.Collections.union;
 import static net.pincette.util.Pair.pair;
+import static net.pincette.util.StreamUtil.composeAsyncStream;
 import static org.apache.kafka.clients.admin.AdminClientConfig.configNames;
 
 import com.typesafe.config.Config;
@@ -32,8 +35,10 @@ import java.util.function.Supplier;
 import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
+import net.pincette.util.Collections;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.ConsumerGroupListing;
+import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult;
 import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsSpec;
 import org.apache.kafka.clients.admin.ListOffsetsResult.ListOffsetsResultInfo;
 import org.apache.kafka.clients.admin.OffsetSpec;
@@ -43,6 +48,7 @@ import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.Serializer;
 
@@ -87,20 +93,36 @@ public class Kafka {
       final Stream<ConsumerGroupListing> groups,
       final Collection<TopicPartition> partitions,
       final Admin admin) {
-    return admin
-        .listConsumerGroupOffsets(groupOffsetSpecs(groups, partitions))
-        .all()
+    return composeAsyncStream(
+            groups
+                .map(g -> consumerGroupOffsets(g.groupId(), partitions, admin).all())
+                .map(KafkaFuture::toCompletionStage))
+        .thenApply(Collections::merge)
         .thenApply(
             offsets ->
                 offsets.entrySet().stream()
                     .collect(
-                        toMap(Entry::getKey, e -> toLong(e.getValue(), OffsetAndMetadata::offset))))
-        .toCompletionStage();
+                        toMap(
+                            Entry::getKey, e -> toLong(e.getValue(), OffsetAndMetadata::offset))));
+  }
+
+  private static ListConsumerGroupOffsetsResult consumerGroupOffsets(
+      final String groupId, final Collection<TopicPartition> partitions, final Admin admin) {
+    return partitions.isEmpty()
+        ? admin.listConsumerGroupOffsets(groupId)
+        : admin.listConsumerGroupOffsets(
+            map(pair(groupId, new ListConsumerGroupOffsetsSpec().topicPartitions(partitions))));
   }
 
   private static CompletionStage<Collection<ConsumerGroupListing>> consumerGroups(
-      final Admin admin) {
-    return admin.listConsumerGroups().valid().toCompletionStage();
+      final Admin admin, final Predicate<String> includeGroup) {
+    return admin
+        .listConsumerGroups()
+        .valid()
+        .toCompletionStage()
+        .thenApply(
+            listing ->
+                listing.stream().filter(l -> includeGroup.test(l.groupId())).collect(toList()));
   }
 
   /**
@@ -160,14 +182,6 @@ public class Kafka {
     return kafkaEnv().collect(toMap(e -> kafkaProperty(e.getKey()), Entry::getValue));
   }
 
-  private static Map<String, ListConsumerGroupOffsetsSpec> groupOffsetSpecs(
-      final Stream<ConsumerGroupListing> groups, final Collection<TopicPartition> partitions) {
-    return groups.collect(
-        toMap(
-            ConsumerGroupListing::groupId,
-            g -> new ListConsumerGroupOffsetsSpec().topicPartitions(partitions)));
-  }
-
   private static Stream<Entry<String, String>> kafkaEnv() {
     return getenv().entrySet().stream().filter(e -> e.getKey().startsWith(KAFKA_PREFIX));
   }
@@ -220,7 +234,10 @@ public class Kafka {
   public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
       final Admin admin, final Predicate<String> includeGroup) {
     return messageLag(
-        () -> topicPartitions(admin), () -> topicPartitionOffsets(admin), admin, includeGroup);
+        () -> completedFuture(emptyList()),
+        () -> topicPartitionOffsets(admin),
+        admin,
+        includeGroup);
   }
 
   /**
@@ -235,9 +252,24 @@ public class Kafka {
    */
   public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
       final String topic, final Admin admin, final Predicate<String> includeGroup) {
+    return messageLag(set(topic), admin, includeGroup);
+  }
+
+  /**
+   * Returns all the message lags for the given topics.
+   *
+   * @param topics the given topics.
+   * @param admin the Kafka admin object.
+   * @param includeGroup the predicate that selects the consumer groups that should be included in
+   *     the result.
+   * @return The completion stage with the map per consumer group.
+   * @since 3.1.7
+   */
+  public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
+      final Set<String> topics, final Admin admin, final Predicate<String> includeGroup) {
     return messageLag(
-        () -> topicPartitions(topic, admin),
-        () -> topicPartitionOffsets(topic, admin),
+        () -> topicPartitions(topics, admin),
+        () -> topicPartitionOffsets(topics, admin),
         admin,
         includeGroup);
   }
@@ -247,17 +279,13 @@ public class Kafka {
       final Supplier<CompletionStage<Map<TopicPartition, Long>>> getPartitionOffsets,
       final Admin admin,
       final Predicate<String> includeGroup) {
-    return consumerGroups(admin)
+    return consumerGroups(admin, includeGroup)
         .thenComposeAsync(
             groups ->
                 getPartitions
                     .get()
                     .thenComposeAsync(
-                        partitions ->
-                            consumerGroupOffsets(
-                                groups.stream().filter(g -> includeGroup.test(g.groupId())),
-                                partitions,
-                                admin)))
+                        partitions -> consumerGroupOffsets(groups.stream(), partitions, admin)))
         .thenComposeAsync(
             groupOffsets ->
                 getPartitionOffsets
@@ -283,6 +311,7 @@ public class Kafka {
       final Map<TopicPartition, Long> partitionOffsets) {
     return consumerGroupOffsets.entrySet().stream()
         .map(e -> pair(e.getKey(), messageLag(e.getValue(), partitionOffsets)))
+        .filter(pair -> !pair.second.isEmpty())
         .collect(toMap(pair -> pair.first, pair -> pair.second));
   }
 
@@ -379,8 +408,8 @@ public class Kafka {
   }
 
   private static CompletionStage<Map<TopicPartition, Long>> topicPartitionOffsets(
-      final String topic, final Admin admin) {
-    return topicPartitionOffsets(() -> topicPartitions(topic, admin), admin);
+      final Set<String> topics, final Admin admin) {
+    return topicPartitionOffsets(() -> topicPartitions(topics, admin), admin);
   }
 
   private static CompletionStage<Map<TopicPartition, Long>> topicPartitionOffsets(
