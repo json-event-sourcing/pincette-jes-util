@@ -55,7 +55,8 @@ public class Href {
    * @since 1.0
    */
   public Href(final String href) {
-    final String[] path = getPath(href);
+    final String[] path =
+        getPath(href).orElseThrow(() -> new GeneralException("Invalid href " + href));
 
     id = getId(path);
     app = path[path.length - (id != null ? 3 : 2)];
@@ -76,14 +77,13 @@ public class Href {
         .orElse(null);
   }
 
-  private static String[] getPath(final String href) {
-    final String[] path = split(href);
+  private static Optional<String[]> getPath(final String href) {
+    return Optional.of(split(href))
+        .filter(path -> path.length == 2 || (path.length == 3 && getId(path) != null));
+  }
 
-    if (path.length < 2 || (getId(path) != null && path.length < 3)) {
-      throw new GeneralException("Invalid href " + href);
-    }
-
-    return path;
+  public static boolean isHref(final String path) {
+    return getPath(path).isPresent();
   }
 
   private static String removePrefix(final String type) {

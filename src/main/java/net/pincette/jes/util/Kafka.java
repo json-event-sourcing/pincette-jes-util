@@ -24,6 +24,7 @@ import static org.apache.kafka.clients.admin.AdminClientConfig.configNames;
 
 import com.typesafe.config.Config;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
@@ -36,6 +37,7 @@ import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 import javax.json.JsonObject;
 import net.pincette.util.Collections;
+import net.pincette.util.State;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.ConsumerGroupListing;
 import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsResult;
@@ -349,6 +351,46 @@ public class Kafka {
         (metadata, exception) -> {
           if (exception != null) {
             completableFuture.completeExceptionally(exception);
+          } else {
+            completableFuture.complete(true);
+          }
+        });
+
+    return completableFuture;
+  }
+
+  /**
+   * Sends a list of messages to Kafka asynchronously.
+   *
+   * @param producer the used producer.
+   * @param records the records to be sent.
+   * @param <K> the key type.
+   * @param <V> the value type.
+   * @return <code>true</code> if the request was successful, <code>false</code> otherwise.
+   * @since 3.1.10
+   */
+  public static <K, V> CompletionStage<Boolean> send(
+      final KafkaProducer<K, V> producer, final List<ProducerRecord<K, V>> records) {
+    final CompletableFuture<Boolean> completableFuture = new CompletableFuture<>();
+    final State<Exception> state = new State<>();
+
+    for (int i = 0; i < records.size() - 1; ++i) {
+      producer.send(
+          records.get(i),
+          (metadata, exception) -> {
+            if (exception != null) {
+              state.set(exception);
+            }
+          });
+    }
+
+    producer.send(
+        records.get(records.size() - 1),
+        (metadata, exception) -> {
+          if (exception != null) {
+            completableFuture.completeExceptionally(exception);
+          } else if (state.get() != null) {
+            completableFuture.completeExceptionally(state.get());
           } else {
             completableFuture.complete(true);
           }

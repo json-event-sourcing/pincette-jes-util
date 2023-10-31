@@ -7,7 +7,7 @@
   <groupId>net.pincette</groupId>
   <artifactId>pincette-jes-util</artifactId>
   <packaging>jar</packaging>
-  <version>3.1.9</version>
+  <version>3.1.10</version>
   <name>pincette-jes-util</name>
   <description>Utilities to work with pincette-jes</description>
   <url>https://github.com/json-event-sourcing/pincette-jes-util</url>
@@ -63,7 +63,7 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-common</artifactId>
-      <version>2.3.4</version>
+      <version>2.3.5</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -73,7 +73,7 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-rs</artifactId>
-      <version>3.3</version>
+      <version>3.4</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -131,10 +131,10 @@
           </additionalJOptions>
           <links>
             <link>https://docs.oracle.com/en/java/javase/11/docs/api/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-common/2.3.3/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-common/2.3.4/</link>
             <link>https://www.javadoc.io/doc/net.pincette/pincette-json/2.1.1/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-mongo/4.1.6/</link>
-            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/3.2.2/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-mongo/4.1.7/</link>
+            <link>https://www.javadoc.io/doc/net.pincette/pincette-rs/3.3/</link>
             <link>https://www.javadoc.io/doc/javax.json/javax.json-api/1.1.4/</link>
             <link>https://www.javadoc.io/doc/org.apache.kafka/kafka-clients/3.6.0/</link>
             <link>https://www.javadoc.io/doc/org.typesafe/config-streams/1.4.2/</link>
