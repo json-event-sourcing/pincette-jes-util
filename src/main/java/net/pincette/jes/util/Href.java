@@ -5,6 +5,7 @@ import static net.pincette.util.Util.getSegments;
 import static net.pincette.util.Util.tryToGetRethrow;
 
 import java.net.URI;
+import java.util.Objects;
 import java.util.Optional;
 import net.pincette.util.Util.GeneralException;
 
@@ -78,7 +79,7 @@ public class Href {
   }
 
   private static Optional<String[]> getPath(final String href) {
-    return Optional.of(split(href))
+    return Optional.of(split(href.substring(contextPath != null ? contextPath.length() : 0)))
         .filter(path -> path.length == 2 || (path.length == 3 && getId(path) != null));
   }
 
@@ -122,7 +123,7 @@ public class Href {
     return other instanceof Href
         && ((Href) other).app.equals(app)
         && ((Href) other).type.equals(type)
-        && ((Href) other).id.equals(id);
+        && Objects.equals(((Href) other).id, id);
   }
 
   @Override
