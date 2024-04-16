@@ -9,7 +9,6 @@ import static java.util.Optional.ofNullable;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static net.pincette.json.JsonUtil.createObjectBuilder;
@@ -123,8 +122,7 @@ public class Kafka {
         .valid()
         .toCompletionStage()
         .thenApply(
-            listing ->
-                listing.stream().filter(l -> includeGroup.test(l.groupId())).collect(toList()));
+            listing -> listing.stream().filter(l -> includeGroup.test(l.groupId())).toList());
   }
 
   /**
@@ -441,7 +439,7 @@ public class Kafka {
   public static Collection<TopicPartition> toPartitions(final Collection<TopicDescription> topics) {
     return topics.stream()
         .flatMap(t -> t.partitions().stream().map(p -> new TopicPartition(t.name(), p.partition())))
-        .collect(toList());
+        .toList();
   }
 
   private static CompletionStage<Map<TopicPartition, Long>> topicPartitionOffsets(

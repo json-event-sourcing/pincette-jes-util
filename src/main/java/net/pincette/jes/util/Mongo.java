@@ -14,7 +14,6 @@ import static java.util.Optional.ofNullable;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.logging.Level.SEVERE;
 import static java.util.logging.Logger.getGlobal;
-import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Stream.concat;
@@ -85,7 +84,7 @@ import org.bson.conversions.Bson;
 /**
  * MongoDB utilities.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.0
  */
 public class Mongo {
@@ -148,7 +147,7 @@ public class Mongo {
                 event.entrySet().stream()
                     .filter(e -> !e.getKey().equals(ID) && !e.getKey().equals(SEQ))
                     .map(e -> new BsonElement(e.getKey(), fromJson(e.getValue()))))
-            .collect(toList()));
+            .toList());
   }
 
   /**
@@ -444,7 +443,7 @@ public class Mongo {
         .map(
             hrefs ->
                 fetchHrefs(hrefs, environment, database)
-                    .thenApply(map -> json.stream().map(j -> resolve(j, map)).collect(toList())))
+                    .thenApply(map -> json.stream().map(j -> resolve(j, map)).toList()))
         .orElseGet(() -> completedFuture(json));
   }
 
@@ -696,7 +695,7 @@ public class Mongo {
                         .filter(JsonUtil::isObject)
                         .map(JsonValue::asJsonObject)))
             .map(op -> new UpdateOneModel<Document>(filter, fromJson(op)))
-            .collect(toList());
+            .toList();
     final BulkWriteOptions options = new BulkWriteOptions().ordered(true);
 
     return exec(

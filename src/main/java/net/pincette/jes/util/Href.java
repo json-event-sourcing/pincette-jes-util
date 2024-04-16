@@ -12,7 +12,7 @@ import net.pincette.util.Util.GeneralException;
 /**
  * A utility to work with hrefs in aggregates.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.0
  */
 public class Href {
@@ -120,10 +120,10 @@ public class Href {
 
   @Override
   public boolean equals(final Object other) {
-    return other instanceof Href
-        && ((Href) other).app.equals(app)
-        && ((Href) other).type.equals(type)
-        && Objects.equals(((Href) other).id, id);
+    return other instanceof Href href
+        && href.app.equals(app)
+        && href.type.equals(type)
+        && Objects.equals(href.id, id);
   }
 
   @Override
