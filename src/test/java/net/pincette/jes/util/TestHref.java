@@ -7,7 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class TestHref {
-  private final String UUID = "c9e24445-bcad-4435-b9fd-d3f3a165bd50";
+  private static final String UUID = "c9e24445-bcad-4435-b9fd-d3f3a165bd50";
 
   @Test
   @DisplayName("href1")
