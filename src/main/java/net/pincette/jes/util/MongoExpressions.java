@@ -43,7 +43,7 @@ import org.bson.Document;
 /**
  * This is a set of MongoDB operator extensions.
  *
- * @author Werner Donn\u00e9
+ * @author Werner Donné
  * @since 1.3
  */
 public class MongoExpressions {
