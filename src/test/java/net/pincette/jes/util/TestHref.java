@@ -24,6 +24,18 @@ class TestHref {
   @Test
   @DisplayName("href3")
   void href3() {
+    assertEquals(new Href("a", "b", UUID), new Href("/a-b/" + UUID));
+  }
+
+  @Test
+  @DisplayName("href4")
+  void href4() {
+    assertEquals(new Href("a", "b"), new Href("/a-b"));
+  }
+
+  @Test
+  @DisplayName("href5")
+  void href5() {
     final Href href = new Href("a", "b", UUID);
 
     assertEquals("a", href.app);
@@ -32,21 +44,21 @@ class TestHref {
   }
 
   @Test
-  @DisplayName("href4")
-  void href4() {
+  @DisplayName("href6")
+  void href6() {
     assertEquals("/a/b/" + UUID, new Href("/a/b/" + UUID).path());
   }
 
   @Test
-  @DisplayName("href5")
-  void href5() {
+  @DisplayName("href7")
+  void href7() {
     setContextPath("/api");
     assertEquals(new Href("a", "b", UUID), new Href("/api/a/b/" + UUID));
   }
 
   @Test
-  @DisplayName("href6")
-  void href6() {
+  @DisplayName("href8")
+  void href8() {
     assertEquals("/api/a/b/" + UUID, new Href("/api/a/b/" + UUID).path());
   }
 }

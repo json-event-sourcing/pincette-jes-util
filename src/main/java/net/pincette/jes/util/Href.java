@@ -1,12 +1,16 @@
 package net.pincette.jes.util;
 
 import static java.util.Objects.hash;
+import static net.pincette.util.Pair.pair;
 import static net.pincette.util.Util.getSegments;
+import static net.pincette.util.Util.isUUID;
 import static net.pincette.util.Util.tryToGetRethrow;
 
 import java.net.URI;
 import java.util.Objects;
 import java.util.Optional;
+import net.pincette.util.Cases;
+import net.pincette.util.Pair;
 import net.pincette.util.Util.GeneralException;
 
 /**
@@ -56,12 +60,11 @@ public class Href {
    * @since 1.0
    */
   public Href(final String href) {
-    final String[] path =
-        getPath(href).orElseThrow(() -> new GeneralException("Invalid href " + href));
+    final Href h = decompose(href).orElseThrow(() -> new GeneralException("Invalid href " + href));
 
-    id = getId(path);
-    app = path[path.length - (id != null ? 3 : 2)];
-    type = addPrefix(app, path[path.length - (id != null ? 2 : 1)]);
+    id = h.id;
+    app = h.app;
+    type = addPrefix(h.app, h.type);
   }
 
   private static String addPrefix(final String app, final String type) {
@@ -71,20 +74,28 @@ public class Href {
         .orElse(type);
   }
 
-  private static String getId(final String[] path) {
-    return Optional.of(path)
-        .map(p -> p[p.length - 1])
-        .filter(net.pincette.util.Util::isUUID)
-        .orElse(null);
+  private static Optional<Href> decompose(final String path) {
+    return Cases.<String[], Href>withValue(
+            split(path.substring(contextPath != null ? contextPath.length() : 0)))
+        .or(p -> p.length == 3 && isUUID(p[2]), p -> new Href(p[0], p[1], p[2]))
+        .or(
+            p -> p.length == 2 && isUUID(p[1]),
+            p -> fullType(p[0]).map(pair -> new Href(pair.first, pair.second, p[1])).orElse(null))
+        .or(p -> p.length == 2 && !isUUID(p[1]), p -> new Href(p[0], p[1]))
+        .or(
+            p -> p.length == 1,
+            p -> fullType(p[0]).map(pair -> new Href(pair.first, pair.second)).orElse(null))
+        .get();
   }
 
-  private static Optional<String[]> getPath(final String href) {
-    return Optional.of(split(href.substring(contextPath != null ? contextPath.length() : 0)))
-        .filter(path -> path.length == 2 || (path.length == 3 && getId(path) != null));
+  private static Optional<Pair<String, String>> fullType(final String s) {
+    return Optional.of(s.indexOf('-'))
+        .filter(i -> i != -1)
+        .map(i -> pair(s.substring(0, i), s.substring(i + 1)));
   }
 
   public static boolean isHref(final String path) {
-    return getPath(path).isPresent();
+    return decompose(path).isPresent();
   }
 
   private static String removePrefix(final String type) {
