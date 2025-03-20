@@ -3,10 +3,8 @@ package net.pincette.jes.util;
 import static java.lang.String.valueOf;
 import static java.lang.System.getenv;
 import static java.util.Arrays.stream;
-import static java.util.Collections.emptyList;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Optional.ofNullable;
-import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
@@ -40,6 +38,7 @@ import org.apache.kafka.clients.admin.ConsumerGroupDescription;
 import org.apache.kafka.clients.admin.ConsumerGroupListing;
 import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsSpec;
 import org.apache.kafka.clients.admin.ListOffsetsResult.ListOffsetsResultInfo;
+import org.apache.kafka.clients.admin.ListTopicsOptions;
 import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.admin.OffsetSpec.LatestSpec;
 import org.apache.kafka.clients.admin.TopicDescription;
@@ -253,10 +252,7 @@ public class Kafka {
   public static CompletionStage<Map<String, Map<TopicPartition, Long>>> messageLag(
       final Admin admin, final Predicate<String> includeGroup) {
     return messageLag(
-        () -> completedFuture(emptyList()),
-        () -> topicPartitionOffsets(admin),
-        admin,
-        includeGroup);
+        () -> topicPartitions(admin), () -> topicPartitionOffsets(admin), admin, includeGroup);
   }
 
   /**
@@ -556,6 +552,9 @@ public class Kafka {
   }
 
   private static CompletionStage<Collection<TopicListing>> topics(final Admin admin) {
-    return admin.listTopics().listings().toCompletionStage();
+    return admin
+        .listTopics(new ListTopicsOptions().listInternal(false))
+        .listings()
+        .toCompletionStage();
   }
 }
