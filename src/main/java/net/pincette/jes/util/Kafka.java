@@ -66,9 +66,6 @@ public class Kafka {
           map(
               pair("acks", "all"),
               pair("enable.idempotence", true),
-              pair("request.timeout.ms", 5000),
-              // Lower than replica.lag.time.max.ms, so few retries because that may generate
-              // a lot of duplicates.
               pair("max.in.flight.requests.per.connection", 1)));
 
   private Kafka() {}
