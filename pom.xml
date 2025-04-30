@@ -7,7 +7,7 @@
   <groupId>net.pincette</groupId>
   <artifactId>pincette-jes-util</artifactId>
   <packaging>jar</packaging>
-  <version>3.2.7</version>
+  <version>3.2.8</version>
   <name>pincette-jes-util</name>
   <description>Utilities to work with pincette-jes</description>
   <url>https://github.com/json-event-sourcing/pincette-jes-util</url>
@@ -63,27 +63,27 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-common</artifactId>
-      <version>2.5.2</version>
+      <version>2.5.3</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-mongo</artifactId>
-      <version>4.1.12</version>
+      <version>4.1.13</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-rs</artifactId>
-      <version>3.8.0</version>
+      <version>3.8.1</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-json</artifactId>
-      <version>2.2.0</version>
+      <version>2.2.1</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-jes</artifactId>
-      <version>3.2.7</version>
+      <version>3.2.8</version>
     </dependency>
     <dependency>
       <groupId>com.typesafe</groupId>
@@ -93,7 +93,7 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <version>5.12.1</version>
+      <version>5.12.2</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -101,15 +101,12 @@
   <build>
     <plugins>
       <plugin>
-        <groupId>org.sonatype.plugins</groupId>
-        <artifactId>nexus-staging-maven-plugin</artifactId>
-        <version>1.7.0</version>
+        <groupId>org.sonatype.central</groupId>
+        <artifactId>central-publishing-maven-plugin</artifactId>
+        <version>0.7.0</version>
         <extensions>true</extensions>
         <configuration>
-          <serverId>ossrh</serverId>
-          <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-          <autoReleaseAfterClose>false</autoReleaseAfterClose>
-          <keepStagingRepositoryOnCloseRuleFailure>true</keepStagingRepositoryOnCloseRuleFailure>
+          <publishingServerId>central</publishingServerId>
         </configuration>
       </plugin>
       <plugin>
