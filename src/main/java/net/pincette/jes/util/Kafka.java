@@ -5,6 +5,7 @@ import static java.lang.System.getenv;
 import static java.util.Arrays.stream;
 import static java.util.Collections.unmodifiableMap;
 import static java.util.Optional.ofNullable;
+import static java.util.UUID.randomUUID;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toMap;
@@ -16,7 +17,10 @@ import static net.pincette.util.Collections.merge;
 import static net.pincette.util.Collections.set;
 import static net.pincette.util.Collections.union;
 import static net.pincette.util.Pair.pair;
+import static org.apache.kafka.clients.CommonClientConfigs.GROUP_ID_CONFIG;
+import static org.apache.kafka.clients.CommonClientConfigs.GROUP_INSTANCE_ID_CONFIG;
 import static org.apache.kafka.clients.admin.AdminClientConfig.configNames;
+import static org.apache.kafka.clients.consumer.ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG;
 
 import com.typesafe.config.Config;
 import java.util.Collection;
@@ -43,10 +47,12 @@ import org.apache.kafka.clients.admin.OffsetSpec;
 import org.apache.kafka.clients.admin.OffsetSpec.LatestSpec;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.admin.TopicListing;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serializer;
 
 /**
@@ -81,6 +87,22 @@ public class Kafka {
     return config.entrySet().stream()
         .filter(e -> KAFKA_ADMIN_CONFIG_NAMES.contains(e.getKey()))
         .collect(toMap(Entry::getKey, Entry::getValue));
+  }
+
+  public static <K, V> KafkaConsumer<K, V> consumer(
+      final String group,
+      final Map<String, Object> config,
+      final Deserializer<K> keyDeserializer,
+      final Deserializer<V> valueDeserializer) {
+    return new KafkaConsumer<>(
+        merge(
+            config,
+            map(
+                pair(GROUP_ID_CONFIG, group),
+                pair(GROUP_INSTANCE_ID_CONFIG, randomUUID().toString()),
+                pair(ENABLE_AUTO_COMMIT_CONFIG, false))),
+        keyDeserializer,
+        valueDeserializer);
   }
 
   private static CompletionStage<Map<String, Map<TopicPartition, Long>>> consumerGroupOffsets(

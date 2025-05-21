@@ -12,6 +12,7 @@ module net.pincette.jes.util {
   requires typesafe.config;
   requires org.reactivestreams;
   requires net.pincette.jes;
+  requires com.fasterxml.jackson.databind;
 
   exports net.pincette.jes.util;
 }
