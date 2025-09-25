@@ -157,7 +157,7 @@ public class MongoExpressions {
   private static CompletionStage<JsonValue> findObject(
       final MongoCollection<Document> collection, final JsonStructure query) {
     final Function<List<JsonObject>, JsonValue> result =
-        list -> list.size() == 1 ? list.get(0) : NULL;
+        list -> list.size() == 1 ? list.getFirst() : NULL;
 
     return isObject(query)
         ? JsonClient.findOne(collection, query.asJsonObject())

@@ -417,7 +417,7 @@ public class Kafka {
     }
 
     producer.send(
-        records.get(records.size() - 1),
+        records.getLast(),
         (metadata, exception) -> {
           if (exception != null) {
             completableFuture.completeExceptionally(exception);

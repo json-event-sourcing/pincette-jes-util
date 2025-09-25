@@ -421,7 +421,7 @@ public class Mongo {
    */
   public static CompletionStage<JsonObject> resolve(
       final JsonObject json, final String environment, final MongoDatabase database) {
-    return resolve(list(json), environment, database).thenApply(list -> list.get(0));
+    return resolve(list(json), environment, database).thenApply(list -> list.getFirst());
   }
 
   /**
@@ -768,7 +768,7 @@ public class Mongo {
       final Reducer reducer, final String environment, final MongoDatabase database) {
     return (command, state) ->
         resolve(list(command, state), environment, database)
-            .thenComposeAsync(resolved -> reducer.apply(resolved.get(0), resolved.get(1)))
+            .thenComposeAsync(resolved -> reducer.apply(resolved.getFirst(), resolved.get(1)))
             .thenApply(Mongo::unresolve);
   }
 
