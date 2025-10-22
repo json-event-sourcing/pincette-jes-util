@@ -7,7 +7,7 @@
   <groupId>net.pincette</groupId>
   <artifactId>pincette-jes-util</artifactId>
   <packaging>jar</packaging>
-  <version>3.2.13</version>
+  <version>3.2.14</version>
   <name>pincette-jes-util</name>
   <description>Utilities to work with pincette-jes</description>
   <url>https://github.com/json-event-sourcing/pincette-jes-util</url>
@@ -68,12 +68,12 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-mongo</artifactId>
-      <version>4.3.1</version>
+      <version>4.3.2</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-rs</artifactId>
-      <version>3.11.0</version>
+      <version>3.11.2</version>
     </dependency>
     <dependency>
       <groupId>net.pincette</groupId>
@@ -83,7 +83,7 @@
     <dependency>
       <groupId>net.pincette</groupId>
       <artifactId>pincette-jes</artifactId>
-      <version>3.2.12</version>
+      <version>4.0.0</version>
     </dependency>
     <dependency>
       <groupId>com.typesafe</groupId>
@@ -93,7 +93,7 @@
     <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
-      <version>5.13.4</version>
+      <version>5.14.0</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -133,7 +133,7 @@
             </additionalJOption>
           </additionalJOptions>
           <links>
-            <link>https://docs.oracle.com/en/java/javase/17/docs/api/</link>
+            <link>https://docs.oracle.com/en/java/javase/21/docs/api/</link>
             <link>https://www.javadoc.io/doc/net.pincette/pincette-common/latest/</link>
             <link>https://www.javadoc.io/doc/net.pincette/pincette-json/latest/</link>
             <link>https://www.javadoc.io/doc/net.pincette/pincette-mongo/latest/</link>
