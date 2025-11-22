@@ -20,6 +20,7 @@ import static net.pincette.util.Pair.pair;
 import static org.apache.kafka.clients.CommonClientConfigs.GROUP_ID_CONFIG;
 import static org.apache.kafka.clients.CommonClientConfigs.GROUP_INSTANCE_ID_CONFIG;
 import static org.apache.kafka.clients.admin.AdminClientConfig.configNames;
+import static org.apache.kafka.clients.admin.ListGroupsOptions.forConsumerGroups;
 import static org.apache.kafka.clients.consumer.ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG;
 
 import com.typesafe.config.Config;
@@ -39,12 +40,11 @@ import javax.json.JsonObject;
 import net.pincette.util.State;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.ConsumerGroupDescription;
-import org.apache.kafka.clients.admin.ConsumerGroupListing;
+import org.apache.kafka.clients.admin.GroupListing;
 import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsSpec;
 import org.apache.kafka.clients.admin.ListOffsetsResult.ListOffsetsResultInfo;
 import org.apache.kafka.clients.admin.ListTopicsOptions;
 import org.apache.kafka.clients.admin.OffsetSpec;
-import org.apache.kafka.clients.admin.OffsetSpec.LatestSpec;
 import org.apache.kafka.clients.admin.TopicDescription;
 import org.apache.kafka.clients.admin.TopicListing;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -106,11 +106,11 @@ public class Kafka {
   }
 
   private static CompletionStage<Map<String, Map<TopicPartition, Long>>> consumerGroupOffsets(
-      final Collection<ConsumerGroupListing> groups,
+      final Collection<GroupListing> groups,
       final Collection<TopicPartition> partitions,
       final Admin admin) {
     return consumerGroupOffsets(
-        groups.stream().map(ConsumerGroupListing::groupId).collect(toSet()), partitions, admin);
+        groups.stream().map(GroupListing::groupId).collect(toSet()), partitions, admin);
   }
 
   /**
@@ -139,10 +139,10 @@ public class Kafka {
                             Entry::getKey, e -> toLong(e.getValue(), OffsetAndMetadata::offset))));
   }
 
-  private static CompletionStage<Collection<ConsumerGroupListing>> consumerGroups(
+  private static CompletionStage<Collection<GroupListing>> consumerGroups(
       final Admin admin, final Predicate<String> includeGroup) {
     return admin
-        .listConsumerGroups()
+        .listGroups(forConsumerGroups())
         .valid()
         .toCompletionStage()
         .thenApply(
@@ -231,7 +231,7 @@ public class Kafka {
 
   private static Map<TopicPartition, OffsetSpec> latest(
       final Collection<TopicPartition> partitions) {
-    return partitions.stream().collect(toMap(p -> p, p -> new LatestSpec()));
+    return partitions.stream().collect(toMap(p -> p, p -> OffsetSpec.latest()));
   }
 
   /**
@@ -477,6 +477,53 @@ public class Kafka {
   }
 
   /**
+   * Returns the latest offset info for each topic partition for all topics.
+   *
+   * @param admin the Kafka admin object.
+   * @return The offset info per partition.
+   * @since 3.3.0
+   */
+  public static CompletionStage<Map<TopicPartition, ListOffsetsResultInfo>>
+      topicPartitionOffsetInfo(final Admin admin) {
+    return topicPartitionOffsetInfo(() -> topicPartitions(admin), admin);
+  }
+
+  /**
+   * Returns the latest offset info for each topic partition of the given topics.
+   *
+   * @param topics the given topics.
+   * @param admin the Kafka admin object.
+   * @return The offset info per partition.
+   * @since 3.3.0
+   */
+  public static CompletionStage<Map<TopicPartition, ListOffsetsResultInfo>>
+      topicPartitionOffsetInfo(final Set<String> topics, final Admin admin) {
+    return topicPartitionOffsetInfo(() -> topicPartitions(topics, admin), admin);
+  }
+
+  private static CompletionStage<Map<TopicPartition, ListOffsetsResultInfo>>
+      topicPartitionOffsetInfo(
+          final Supplier<CompletionStage<Collection<TopicPartition>>> getPartitions,
+          final Admin admin) {
+    return getPartitions
+        .get()
+        .thenComposeAsync(partitions -> topicPartitionOffsetInfo(partitions, admin));
+  }
+
+  /**
+   * Returns the latest offset info for the given topic partitions.
+   *
+   * @param partitions the given topic partitions.
+   * @param admin the Kafka admin object.
+   * @return The offset info per partition.
+   * @since 3.3.0
+   */
+  public static CompletionStage<Map<TopicPartition, ListOffsetsResultInfo>>
+      topicPartitionOffsetInfo(final Collection<TopicPartition> partitions, final Admin admin) {
+    return admin.listOffsets(latest(partitions)).all().toCompletionStage();
+  }
+
+  /**
    * Returns the latest offsets for each topic partition for all topics.
    *
    * @param admin the Kafka admin object.
@@ -519,10 +566,7 @@ public class Kafka {
    */
   public static CompletionStage<Map<TopicPartition, Long>> topicPartitionOffsets(
       final Collection<TopicPartition> partitions, final Admin admin) {
-    return admin
-        .listOffsets(latest(partitions))
-        .all()
-        .toCompletionStage()
+    return topicPartitionOffsetInfo(partitions, admin)
         .thenApply(offsets -> toLong(offsets, ListOffsetsResultInfo::offset));
   }
 
